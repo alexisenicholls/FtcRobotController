@@ -19,5 +19,7 @@ public class ColorSensorTest extends OpMode {
         detectedColor = bench.getDetectedColor(telemetry); // get color
         telemetry.addData("Color Detected", detectedColor.toString());
         telemetry.update();
+
+        
     }
 }
