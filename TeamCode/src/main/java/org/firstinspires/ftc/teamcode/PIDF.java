@@ -22,12 +22,21 @@ private DcMotorEx arm_motor;
     @Override
     public void init() {
         controller= new PIDController(p, i, d);
-        telemetry = new MultipleTelemetry(telemetry, FTC Dashboard.getInstance().get)
+        telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+
+        arm_motor = hardwareMap.get(DcMotorEx.class, deviceName: "arm_motor0");
     }
-     // paused video at 5;00 m
+
+
 
     @Override
     public void loop() {
+        controller.setPID(p, i, d);
+        int armPos = arm_motor.getCurrentPosition();
+        double pid = controller.calculate(armPos, target);
+        /* 6:18, this is where he makes some
+        caluations using the info we had to get about our motor.
+         */
 
     }
 }
