@@ -20,6 +20,5 @@ public class ColorSensorTest extends OpMode {
         telemetry.addData("Color Detected", detectedColor.toString());
         telemetry.update();
 
-
     }
 }
