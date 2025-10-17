@@ -13,7 +13,7 @@ import java.lang.reflect.Modifier;
 
 /*
  * Test the dashboard gamepad integration.
- * 
+ *
  */
 @Autonomous
 public class GamepadTestOpMode extends LinearOpMode {
@@ -51,6 +51,7 @@ public class GamepadTestOpMode extends LinearOpMode {
             telemetry.update();
 
             sleep(20);
+            
         }
     }
 }

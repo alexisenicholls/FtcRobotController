@@ -15,7 +15,7 @@ public class  PIDF extends OpMode {
 
     public static int target = 0;
 
-    private final double tick_in_degrees = 700 / 180.0;   // todo, find amount of ticks needed the motor we are using is 1150 RPM
+    private final double tick_in_degrees = 1 / 180.0;   // todo, find amount of ticks needed the motor we are using is 1150 RPM
 
 private DcMotorEx arm_motor;
 
