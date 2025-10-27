@@ -51,7 +51,7 @@ public class GamepadTestOpMode extends LinearOpMode {
             telemetry.update();
 
             sleep(20);
-            
+
         }
     }
 }
