@@ -15,7 +15,7 @@ public class Constants {
     public static FollowerConstants followerConstants = new FollowerConstants()
             .forwardZeroPowerAcceleration(1) //TODO go to this link to tune the robot (found on telemetry) https://pedropathing.com/docs/pathing/tuning/automatic
             .lateralZeroPowerAcceleration(1) //TODO again found on telemetry (same link as above) (tuning)
-            .mass(5); //TODO set the mass
+            .mass(5); //TODO set the mass kg
 
 
     public static PathConstraints pathConstraints = new PathConstraints(0.99, 100, 1, 1);
