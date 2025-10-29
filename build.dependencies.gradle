@@ -1,15 +1,16 @@
-repositories{
-    mavenCentral()
-    google() // Needed for androidx
-    jcenter() // Needed for tensorflow-lite
-    flatDir {
-        dirs = [ rootProject.file('libs') ]
-        }
-    maven { url 'https://jicpack.oi' }
-    maven {url = 'https://maven.brott.dev/'}
+// Repositories
+repositories {
+    google()                // AndroidX, aapt2, etc.
+    mavenCentral()          // Standard Java/Android packages
+    jcenter()               // Optional for older dependencies
+    maven { url "https://mymaven.bylazar.com/releases" } // Bylazar libraries
+    maven { url "https://maven.brott.dev" }             // Acme Robotics / Dashboard
+    flatDir { dirs rootProject.file("libs") }           // Local JARs if needed
 }
 
+// Dependencies
 dependencies {
+    // FTC SDK (use consistent version 11.0.0)
     implementation 'org.firstinspires.ftc:Inspection:11.0.0'
     implementation 'org.firstinspires.ftc:Blocks:11.0.0'
     implementation 'org.firstinspires.ftc:RobotCore:11.0.0'
@@ -18,8 +19,17 @@ dependencies {
     implementation 'org.firstinspires.ftc:Hardware:11.0.0'
     implementation 'org.firstinspires.ftc:FtcCommon:11.0.0'
     implementation 'org.firstinspires.ftc:Vision:11.0.0'
+
+    // Android support
     implementation 'androidx.appcompat:appcompat:1.2.0'
-    implementation 'com.acmerobitcs.dashborad:dashborad:0.4.4'
 
+    // Acme Robotics Dashboard
+    implementation 'com.acmerobotics.dashboard:dashboard:0.5.0'
+
+    // Pedro Pathing
+    implementation 'com.pedropathing:ftc:2.0.2'
+    implementation 'com.pedropathing:telemetry:1.0.0'
+
+    // Bylazar panels
+    implementation 'com.bylazar:fullpanels:1.0.6'
 }
-
