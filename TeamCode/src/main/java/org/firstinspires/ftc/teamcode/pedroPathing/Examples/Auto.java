@@ -20,7 +20,7 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 public class Auto extends OpMode {
 
     private Follower follower;
-    private Timer pathTimer;
+    private Timer pathTimer; 
     private int pathState;
 
     // Start pose and endpoints (from your JSON)
