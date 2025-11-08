@@ -16,8 +16,8 @@ public class MotorDirections extends LinearOpMode {
     public void runOpMode() throws InterruptedException {
 
         // Initialize odometry pods
-        leftPod = hardwareMap.get(DcMotor.class, "bl");    // left Y pod
-        rightPod = hardwareMap.get(DcMotor.class, "br");   // right Y pod
+        leftPod = hardwareMap.get(DcMotor.class, "br");    // left Y pod
+        rightPod = hardwareMap.get(DcMotor.class, "bl");   // right Y pod
         strafePod = hardwareMap.get(DcMotor.class, "fr");  // strafe X pod
 
         // Set pods to run without encoders since we're only reading encoder values

@@ -13,22 +13,26 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 public class Constants {
     public static FollowerConstants followerConstants = new FollowerConstants()
-            .mass(8.16);
+            .mass(8.16)
+            .forwardZeroPowerAcceleration(-40.17214561629185)
+            .lateralZeroPowerAcceleration(-54.53313144693408);
 
 
     public static ThreeWheelIMUConstants localizerConstants = new ThreeWheelIMUConstants()
-            .leftPodY(4.9)
+            .leftPodY(3)
             .rightPodY(-3)
-            .strafePodX(4.9)
-            .leftEncoder_HardwareMapName("bl")
-            .rightEncoder_HardwareMapName("br")
+            .strafePodX(-2.5)
+            .leftEncoder_HardwareMapName("br")
+            .rightEncoder_HardwareMapName("bl")
             .strafeEncoder_HardwareMapName("fr")
-            .leftEncoderDirection(Encoder.REVERSE)
+            .leftEncoderDirection(Encoder.FORWARD)
             .rightEncoderDirection(Encoder.FORWARD)
-            .strafeEncoderDirection(Encoder.REVERSE)
+            .strafeEncoderDirection(Encoder.FORWARD)
             .IMU_HardwareMapName("imu")
-            .IMU_Orientation(new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.LEFT, RevHubOrientationOnRobot.UsbFacingDirection.UP));
-
+            .IMU_Orientation(new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.LEFT, RevHubOrientationOnRobot.UsbFacingDirection.UP))
+            .forwardTicksToInches(0.0020045042488761686)
+            .strafeTicksToInches(0.00204900070779000633)
+            .turnTicksToInches(0.0019284613625701373);
 
     public static MecanumConstants driveConstants = new MecanumConstants()
             .maxPower(1)
@@ -40,6 +44,8 @@ public class Constants {
             .leftRearMotorDirection(DcMotorSimple.Direction.REVERSE)
             .rightFrontMotorDirection(DcMotorSimple.Direction.FORWARD)
             .rightRearMotorDirection(DcMotorSimple.Direction.FORWARD)
+            .xVelocity(57.5110963997171)
+            .yVelocity(49.028104086235686)
             ;
 
 
