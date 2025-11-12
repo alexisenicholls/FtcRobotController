@@ -9,36 +9,46 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 @TeleOp
-public class DriveTrain extends LinearOpMode {
+public class DriveIntakeShooter extends LinearOpMode {
+
+    // Motor power constants
+    private static final double DRIVE_POWER_MULTIPLIER = 1.0;
+    private static final double INTAKE_POWER = 1.0;
+    private static final double SHOOTER_POWER = 1.0;
+
     @Override
     public void runOpMode() throws InterruptedException {
 
-        // Declare motors
+        // Drive motors
         DcMotor frontLeftMotor = hardwareMap.dcMotor.get("fl");
         DcMotor backLeftMotor = hardwareMap.dcMotor.get("bl");
         DcMotor frontRightMotor = hardwareMap.dcMotor.get("fr");
         DcMotor backRightMotor = hardwareMap.dcMotor.get("br");
 
-        // Set motor directions (adjust if needed)
+        // Additional motors
+        DcMotor intakeMotor = hardwareMap.dcMotor.get("intake");
+        DcMotor shooterMotor = hardwareMap.dcMotor.get("shooter");
+
+        // Set directions
         frontRightMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         frontLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         backRightMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         backLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        // ⚙️ Set BRAKE behavior so motors stop instead of coasting
+        // Brake mode
         frontLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         backLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         frontRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         backRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // Initialize IMU
+        // IMU initialization
         IMU imu = hardwareMap.get(IMU.class, "imu");
         IMU.Parameters parameters = new IMU.Parameters(new RevHubOrientationOnRobot(
                 RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
                 RevHubOrientationOnRobot.UsbFacingDirection.UP));
         imu.initialize(parameters);
 
-        // ✅ Reset IMU to 0 heading before start so TeleOp always begins fresh
+        // Reset IMU to 0 heading
         telemetry.addLine("Initializing IMU...");
         telemetry.update();
         sleep(500);
@@ -51,35 +61,50 @@ public class DriveTrain extends LinearOpMode {
         if (isStopRequested()) return;
 
         while (opModeIsActive()) {
-            double y = -gamepad1.left_stick_y; // Forward/Back
+            // Drive inputs
+            double y = -gamepad1.left_stick_y; // Forward/back
             double x = gamepad1.left_stick_x;  // Strafe
             double rx = gamepad1.right_stick_x; // Rotate
 
-            // Manual IMU reset if needed
+            // Manual IMU reset
             if (gamepad1.options) {
                 imu.resetYaw();
             }
 
             double botHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
 
-            // Field-centric transformation
+            // Field-centric calculation
             double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
             double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
-            rotX = rotX * 1.1; // Adjust imperfect strafing
+            rotX *= 1.1; // Correct strafing
 
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1);
-            double frontLeftPower = (rotY + rotX + rx) / denominator;
-            double backLeftPower = (rotY - rotX + rx) / denominator;
-            double frontRightPower = (rotY - rotX - rx) / denominator;
-            double backRightPower = (rotY + rotX - rx) / denominator;
+            double frontLeftPower = (rotY + rotX + rx) / denominator * DRIVE_POWER_MULTIPLIER;
+            double backLeftPower = (rotY - rotX + rx) / denominator * DRIVE_POWER_MULTIPLIER;
+            double frontRightPower = (rotY - rotX - rx) / denominator * DRIVE_POWER_MULTIPLIER;
+            double backRightPower = (rotY + rotX - rx) / denominator * DRIVE_POWER_MULTIPLIER;
 
-            // Apply motor powers
+            // Set drive motor powers
             frontLeftMotor.setPower(frontLeftPower);
             backLeftMotor.setPower(backLeftPower);
             frontRightMotor.setPower(frontRightPower);
             backRightMotor.setPower(backRightPower);
 
-            // Telemetry for debugging
+            // Intake control
+            if (gamepad1.x) {
+                intakeMotor.setPower(INTAKE_POWER);
+            } else {
+                intakeMotor.setPower(0);
+            }
+
+            // Shooter control
+            if (gamepad1.y) {
+                shooterMotor.setPower(SHOOTER_POWER);
+            } else {
+                shooterMotor.setPower(0);
+            }
+
+            // Telemetry
             telemetry.addData("Heading (deg)", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
             telemetry.update();
         }

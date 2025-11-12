@@ -12,7 +12,7 @@ import com.pedropathing.util.Timer;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-@Autonomous(name = "ClosePositionBlue", group = "Examples")
+@Autonomous(name = "Close Position Blue", group = "Examples")
 public class ClosePositionBlue extends OpMode {
 
     private Follower follower;
