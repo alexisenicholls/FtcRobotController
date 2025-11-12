@@ -1,15 +1,16 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 @TeleOp
 public class DriveTrain extends LinearOpMode {
+
     @Override
     public void runOpMode() throws InterruptedException {
 
@@ -25,7 +26,7 @@ public class DriveTrain extends LinearOpMode {
         backRightMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         backLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        // ⚙️ Set BRAKE behavior so motors stop instead of coasting
+        // Brake behavior
         frontLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         backLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         frontRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -38,7 +39,7 @@ public class DriveTrain extends LinearOpMode {
                 RevHubOrientationOnRobot.UsbFacingDirection.UP));
         imu.initialize(parameters);
 
-        // ✅ Reset IMU to 0 heading before start so TeleOp always begins fresh
+        // Reset IMU before start
         telemetry.addLine("Initializing IMU...");
         telemetry.update();
         sleep(500);
@@ -50,22 +51,30 @@ public class DriveTrain extends LinearOpMode {
 
         if (isStopRequested()) return;
 
-        while (opModeIsActive()) {
-            double y = -gamepad1.left_stick_y; // Forward/Back
-            double x = gamepad1.left_stick_x;  // Strafe
-            double rx = gamepad1.right_stick_x; // Rotate
+        boolean aWasPressed = false; // for debounce
 
-            // Manual IMU reset if needed
-            if (gamepad1.options) {
+        while (opModeIsActive()) {
+
+            double y = -gamepad1.left_stick_y; // forward/back
+            double x = gamepad1.left_stick_x;  // strafe
+            double rx = gamepad1.right_stick_x; // rotation
+
+            // ✅ Manual IMU reset (debounced)
+            if (gamepad1.a && !aWasPressed) {
                 imu.resetYaw();
+                telemetry.addLine("IMU Reset!");
+                telemetry.update();
+                aWasPressed = true;
+            } else if (!gamepad1.a) {
+                aWasPressed = false;
             }
 
             double botHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
 
-            // Field-centric transformation
+            // Field-centric drive
             double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
             double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
-            rotX = rotX * 1.1; // Adjust imperfect strafing
+            rotX *= 1.1; // imperfect strafing correction
 
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1);
             double frontLeftPower = (rotY + rotX + rx) / denominator;
@@ -73,14 +82,13 @@ public class DriveTrain extends LinearOpMode {
             double frontRightPower = (rotY - rotX - rx) / denominator;
             double backRightPower = (rotY + rotX - rx) / denominator;
 
-            // Apply motor powers
             frontLeftMotor.setPower(frontLeftPower);
             backLeftMotor.setPower(backLeftPower);
             frontRightMotor.setPower(frontRightPower);
             backRightMotor.setPower(backRightPower);
 
-            // Telemetry for debugging
             telemetry.addData("Heading (deg)", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
+            telemetry.addLine("Press A to reset IMU");
             telemetry.update();
         }
     }
