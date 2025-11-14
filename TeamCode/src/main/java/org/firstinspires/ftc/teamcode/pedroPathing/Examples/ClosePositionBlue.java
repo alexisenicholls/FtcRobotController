@@ -10,7 +10,10 @@ import com.pedropathing.geometry.Pose;
 import com.pedropathing.paths.PathChain;
 import com.pedropathing.util.Timer;
 
+import com.qualcomm.robotcore.hardware.DcMotor;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import com.qualcomm.hardware.limelightvision.LLResult;
+import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult;
 
 @Autonomous(name = "Close Position Blue", group = "Examples")
 public class ClosePositionBlue extends OpMode {
@@ -18,7 +21,8 @@ public class ClosePositionBlue extends OpMode {
     private Follower follower;
     private Timer pathTimer;
     private int pathState;
-    private boolean waiting; // used to start the 1s timer only after path finishes
+    private boolean waiting;
+    private boolean aligning;
 
     // --- Define all Poses ---
     private final Pose startPose = new Pose(21.149, 122.229, Math.toRadians(322));
@@ -31,53 +35,39 @@ public class ClosePositionBlue extends OpMode {
     // --- Path objects ---
     private PathChain path1, path2, path3, path4, path5;
 
+    // Motors for Limelight alignment
+    private DcMotor fl, fr, bl, br;
+
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
         pathTimer = new Timer();
         waiting = false;
+        aligning = false;
+
+        fl = hardwareMap.get(DcMotor.class, "fl");
+        fr = hardwareMap.get(DcMotor.class, "fr");
+        bl = hardwareMap.get(DcMotor.class, "bl");
+        br = hardwareMap.get(DcMotor.class, "br");
 
         buildPaths();
-
         follower.setStartingPose(startPose);
 
-        telemetry.addData("Status", "Initialized - Paths built");
+        telemetry.addLine("Initialized - Paths built and Limelight active");
         telemetry.update();
     }
 
     private void buildPaths() {
-        // Path 1: BezierLine (start → p1End)
-        path1 = follower.pathBuilder()
-                .addPath(new BezierLine(startPose, p1End))
-                .setTangentHeadingInterpolation()
-                .build();
-
-        // Path 2: BezierLine (p1End → p2End)
-        path2 = follower.pathBuilder()
-                .addPath(new BezierLine(p1End, p2End))
-                .setTangentHeadingInterpolation()
-                .build();
-
-        // Path 3: BezierLine (p2End → p3End)
-        path3 = follower.pathBuilder()
-                .addPath(new BezierLine(p2End, p3End))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(322))
-                .build();
-
-        // Path 4: BezierCurve (p3End → p4End)
-        path4 = follower.pathBuilder()
-                .addPath(new BezierCurve(
-                        p3End,
-                        new Pose(58.471, 60.337),
-                        p4End))
-                .setTangentHeadingInterpolation()
-                .build();
-
-        // Path 5: BezierLine (p4End → p5End)
-        path5 = follower.pathBuilder()
-                .addPath(new BezierLine(p4End, p5End))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(322))
-                .build();
+        path1 = follower.pathBuilder().addPath(new BezierLine(startPose, p1End))
+                .setTangentHeadingInterpolation().build();
+        path2 = follower.pathBuilder().addPath(new BezierLine(p1End, p2End))
+                .setTangentHeadingInterpolation().build();
+        path3 = follower.pathBuilder().addPath(new BezierLine(p2End, p3End))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(322)).build();
+        path4 = follower.pathBuilder().addPath(new BezierCurve(p3End, new Pose(58.471, 60.337), p4End))
+                .setTangentHeadingInterpolation().build();
+        path5 = follower.pathBuilder().addPath(new BezierLine(p4End, p5End))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(322)).build();
     }
 
     @Override
@@ -91,89 +81,144 @@ public class ClosePositionBlue extends OpMode {
         autonomousPathUpdate();
 
         telemetry.addData("Path State", pathState);
-        telemetry.addData("X", follower.getPose().getX());
-        telemetry.addData("Y", follower.getPose().getY());
-        telemetry.addData("Heading (deg)", Math.toDegrees(follower.getPose().getHeading()));
-        telemetry.addData("Timer (s)", pathTimer.getElapsedTimeSeconds());
         telemetry.addData("Waiting", waiting);
+        telemetry.addData("Aligning", aligning);
+        telemetry.addData("Timer (s)", pathTimer.getElapsedTimeSeconds());
         telemetry.update();
     }
 
     private void autonomousPathUpdate() {
         switch (pathState) {
             case 0:
-                // start path1, then enter wait-for-finish state (1)
                 follower.followPath(path1);
                 setPathState(1);
                 break;
 
-            case 1: // Wait for Path 1 to finish, then delay 1s
-                if (!follower.isBusy()) {
-                    if (!waiting) {
-                        // first frame after path finished -> start delay timer
-                        waiting = true;
-                        pathTimer.resetTimer();
-                    } else if (pathTimer.getElapsedTimeSeconds() >= 1.0) {
-                        // after 1 second delay, start next path
-                        waiting = false;
-                        follower.followPath(path2);
-                        setPathState(2);
-                    }
+            case 1:
+                // After Path 1: Align + wait
+                if (!follower.isBusy() && !aligning && !waiting) {
+                    aligning = true;
+                    alignWithAprilTag();
+                } else if (aligning && !isAligningActive()) {
+                    aligning = false;
+                    waiting = true;
+                    pathTimer.resetTimer();
+                } else if (waiting && pathTimer.getElapsedTimeSeconds() >= 1.0) {
+                    waiting = false;
+                    follower.followPath(path2);
+                    setPathState(2);
                 }
                 break;
 
             case 2:
-                // run path2 -> immediately go to path3 when finished (no delay)
                 if (!follower.isBusy()) {
                     follower.followPath(path3);
                     setPathState(3);
                 }
                 break;
 
-            case 3: // Wait for Path 3 to finish, then delay 1s
-                if (!follower.isBusy()) {
-                    if (!waiting) {
-                        waiting = true;
-                        pathTimer.resetTimer();
-                    } else if (pathTimer.getElapsedTimeSeconds() >= 1.0) {
-                        waiting = false;
-                        follower.followPath(path4);
-                        setPathState(4);
-                    }
+            case 3:
+                // After Path 3: Align + wait
+                if (!follower.isBusy() && !aligning && !waiting) {
+                    aligning = true;
+                    alignWithAprilTag();
+                } else if (aligning && !isAligningActive()) {
+                    aligning = false;
+                    waiting = true;
+                    pathTimer.resetTimer();
+                } else if (waiting && pathTimer.getElapsedTimeSeconds() >= 1.0) {
+                    waiting = false;
+                    follower.followPath(path4);
+                    setPathState(4);
                 }
                 break;
 
             case 4:
-                // run path4 -> immediately go to path5 when finished (no delay)
                 if (!follower.isBusy()) {
                     follower.followPath(path5);
                     setPathState(5);
                 }
                 break;
 
-            case 5: // Wait for Path 5 to finish, then delay 1s before finishing
-                if (!follower.isBusy()) {
-                    if (!waiting) {
-                        waiting = true;
-                        pathTimer.resetTimer();
-                    } else if (pathTimer.getElapsedTimeSeconds() >= 1.0) {
-                        waiting = false;
-                        setPathState(-1); // Done
-                    }
+            case 5:
+                // After Path 5: Align + wait, then finish
+                if (!follower.isBusy() && !aligning && !waiting) {
+                    aligning = true;
+                    alignWithAprilTag();
+                } else if (aligning && !isAligningActive()) {
+                    aligning = false;
+                    waiting = true;
+                    pathTimer.resetTimer();
+                } else if (waiting && pathTimer.getElapsedTimeSeconds() >= 1.0) {
+                    waiting = false;
+                    setPathState(-1);
                 }
                 break;
 
             default:
-                // do nothing (finished or unhandled state)
                 break;
         }
     }
 
+    /**
+     * Uses Limelight to rotate until the AprilTag is centered (tx near 0°)
+     */
+    private void alignWithAprilTag() {
+        LLResult result = Constants.getLatestVisionResult();
+        if (result == null || !result.isValid()) {
+            stopAllMotors();
+            return;
+        }
+
+        FiducialResult tag = Constants.getPrimaryAprilTag();
+        if (tag == null) {
+            stopAllMotors();
+            return;
+        }
+
+        double tx = tag.getTargetXDegrees();
+        double rotatePower = 0.0;
+
+        if (Math.abs(tx) > Constants.TX_DEADBAND) {
+            rotatePower = -tx * Constants.ROTATE_KP;
+            rotatePower = Math.max(-Constants.MAX_ROTATE_SPEED, Math.min(Constants.MAX_ROTATE_SPEED, rotatePower));
+        }
+
+        double flPower = -rotatePower;
+        double blPower = -rotatePower;
+        double frPower = rotatePower;
+        double brPower = rotatePower;
+
+        fl.setPower(flPower);
+        bl.setPower(blPower);
+        fr.setPower(frPower);
+        br.setPower(brPower);
+
+        // If tag is centered, stop alignment
+        if (Math.abs(tx) <= Constants.TX_DEADBAND) {
+            stopAllMotors();
+        }
+    }
+
+    private boolean isAligningActive() {
+        LLResult result = Constants.getLatestVisionResult();
+        if (result == null || !result.isValid()) return false;
+        FiducialResult tag = Constants.getPrimaryAprilTag();
+        if (tag == null) return false;
+        return Math.abs(tag.getTargetXDegrees()) > Constants.TX_DEADBAND;
+    }
+
+    private void stopAllMotors() {
+        fl.setPower(0);
+        fr.setPower(0);
+        bl.setPower(0);
+        br.setPower(0);
+    }
+
     private void setPathState(int newState) {
         pathState = newState;
-        // do not pre-reset the timer for the "waiting after finish" logic;
-        // reset waiting only when state changes
         waiting = false;
+        aligning = false;
         pathTimer.resetTimer();
     }
 }
