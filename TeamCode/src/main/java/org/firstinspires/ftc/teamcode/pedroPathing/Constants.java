@@ -28,10 +28,10 @@ public class Constants {
     public static Limelight3A limelight;
 
     // === Vision Tuning ===
-    public static final double ROTATE_KP = 0.035;       // proportional gain for AprilTag rotation
-    public static final double TX_DEADBAND = 1.5;       // degrees tolerance
-    public static final double MAX_ROTATE_SPEED = 0.6;  // maximum rotation speed
-    public static final double DRIVE_SPEED = 0.5;       // forward assist speed
+    public static final double ROTATE_KP = 0.035;
+    public static final double TX_DEADBAND = 1.5;
+    public static final double MAX_ROTATE_SPEED = 0.6;
+    public static final double DRIVE_SPEED = 0.5;
 
     // === Core Follower Constants ===
     public static FollowerConstants followerConstants = new FollowerConstants()
@@ -72,12 +72,19 @@ public class Constants {
             .xVelocity(57.5110963997171)
             .yVelocity(49.028104086235686);
 
+    // === Intake Motor Constants (ADDED) ===
+    public static final String INTAKE_MOTOR_NAME = "intake";
+    public static final DcMotorSimple.Direction INTAKE_DIRECTION =
+            DcMotorSimple.Direction.REVERSE;
+
     // === Path Following Constraints ===
-    public static PathConstraints pathConstraints = new PathConstraints(0.99, 100, 1, 1);
+    public static PathConstraints pathConstraints =
+            new PathConstraints(0.99, 100, 1, 1);
 
     // === Follower Builder ===
     public static Follower createFollower(HardwareMap hardwareMap) {
-        // Initialize Limelight here (shared reference)
+
+        // initialize limelight once
         if (limelight == null) {
             limelight = hardwareMap.get(Limelight3A.class, "Limelight");
             limelight.setPollRateHz(100);
@@ -92,13 +99,13 @@ public class Constants {
                 .build();
     }
 
-    // === Limelight Helper Method ===
+    // === Limelight Helper ===
     public static LLResult getLatestVisionResult() {
         if (limelight == null) return null;
         return limelight.getLatestResult();
     }
 
-    // === AprilTag Detection Helper ===
+    // === AprilTag Helper ===
     public static FiducialResult getPrimaryAprilTag() {
         LLResult result = getLatestVisionResult();
         if (result != null && result.isValid()) {
