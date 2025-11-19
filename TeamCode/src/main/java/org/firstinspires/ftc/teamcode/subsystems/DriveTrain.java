@@ -9,6 +9,7 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult;
+
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 import java.util.List;
@@ -33,16 +34,19 @@ public class DriveTrain extends LinearOpMode {
 
         // ---------- INTAKE MOTOR ----------
         DcMotor intakeMotor = hardwareMap.dcMotor.get("intake");
+
+        // Match your working test code
         intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+        intakeMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // Motor directions
+        // ---------- MOTOR DIRECTIONS ----------
         frontRightMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         frontLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         backRightMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         backLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        // Brake behavior
+        // ---------- BRAKE BEHAVIOR ----------
         frontLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         backLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         frontRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -52,7 +56,8 @@ public class DriveTrain extends LinearOpMode {
         IMU imu = hardwareMap.get(IMU.class, "imu");
         IMU.Parameters parameters = new IMU.Parameters(new RevHubOrientationOnRobot(
                 RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
-                RevHubOrientationOnRobot.UsbFacingDirection.UP));
+                RevHubOrientationOnRobot.UsbFacingDirection.UP
+        ));
         imu.initialize(parameters);
 
         // ---------- LIMELIGHT ----------
@@ -75,23 +80,25 @@ public class DriveTrain extends LinearOpMode {
 
         while (opModeIsActive()) {
 
-            // --- Default driving controls ---
+            // ---------- FIELD-CENTRIC DRIVE ----------
             double y = -gamepad1.left_stick_y;
             double x = gamepad1.left_stick_x;
             double rx = gamepad1.right_stick_x;
 
             double botHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+
             double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
             double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
             rotX *= 1.1;
 
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1);
-            double frontLeftPower = (rotY + rotX + rx) / denominator;
-            double backLeftPower = (rotY - rotX + rx) / denominator;
-            double frontRightPower = (rotY - rotX - rx) / denominator;
-            double backRightPower = (rotY + rotX - rx) / denominator;
 
-            // --- IMU reset (A button) ---
+            double frontLeftPower  = (rotY + rotX + rx) / denominator;
+            double backLeftPower   = (rotY - rotX + rx) / denominator;
+            double frontRightPower = (rotY - rotX - rx) / denominator;
+            double backRightPower  = (rotY + rotX - rx) / denominator;
+
+            // ---------- IMU RESET ----------
             if (gamepad1.a && !aWasPressed) {
                 imu.resetYaw();
                 telemetry.addLine("IMU Reset!");
@@ -100,7 +107,7 @@ public class DriveTrain extends LinearOpMode {
                 aWasPressed = false;
             }
 
-            // --- AprilTag Alignment (B button) ---
+            // ---------- APRILTAG ALIGN ----------
             if (gamepad1.b) {
                 LLResult result = limelight.getLatestResult();
                 boolean tagVisible = false;
@@ -109,6 +116,7 @@ public class DriveTrain extends LinearOpMode {
 
                 if (result != null && result.isValid()) {
                     List<FiducialResult> fiducials = result.getFiducialResults();
+
                     if (!fiducials.isEmpty()) {
                         tagVisible = true;
                         tx = fiducials.get(0).getTargetXDegrees();
@@ -117,17 +125,17 @@ public class DriveTrain extends LinearOpMode {
                 }
 
                 if (tagVisible) {
-                    double rotate = 0.0;
+                    double rotate = 0;
 
                     if (Math.abs(tx) > TX_DEADBAND) {
                         rotate = -tx * ROTATE_KP;
                         rotate = Math.max(-MAX_ROTATE_SPEED, Math.min(MAX_ROTATE_SPEED, rotate));
                     }
 
-                    frontLeftPower = DRIVE_SPEED - rotate;
-                    backLeftPower = DRIVE_SPEED - rotate;
+                    frontLeftPower  = DRIVE_SPEED - rotate;
+                    backLeftPower   = DRIVE_SPEED - rotate;
                     frontRightPower = DRIVE_SPEED + rotate;
-                    backRightPower = DRIVE_SPEED + rotate;
+                    backRightPower  = DRIVE_SPEED + rotate;
 
                     telemetry.addData("AprilTag", "ID: %d   Tx: %.2f", tagId, tx);
                     telemetry.addLine("Aligning...");
@@ -136,25 +144,30 @@ public class DriveTrain extends LinearOpMode {
                 }
             }
 
-            // ---------- INTAKE CONTROL (X BUTTON) ----------
-            // X = spin backwards
-            if (gamepad1.x) {
+            // ---------- INTAKE CONTROL (TRIGGERS) ----------
+            // We use a threshold (0.1) so slight touches don't activate it
+            if (gamepad1.right_trigger > 0.1) {
+                // INTAKE
+                intakeMotor.setPower(1.0);
+            } else if (gamepad1.left_trigger > 0.1) {
+                // OUTTAKE
                 intakeMotor.setPower(-1.0);
             } else {
+                // STOP
                 intakeMotor.setPower(0);
             }
 
-            // --- Apply motor power ---
+            // ---------- APPLY DRIVE POWER ----------
             frontLeftMotor.setPower(frontLeftPower);
             backLeftMotor.setPower(backLeftPower);
             frontRightMotor.setPower(frontRightPower);
             backRightMotor.setPower(backRightPower);
 
-            // --- Telemetry ---
+            // ---------- TELEMETRY ----------
             telemetry.addData("Heading", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
             telemetry.addLine("A = Reset IMU");
-            telemetry.addLine("Hold B = AprilTag Align");
-            telemetry.addLine("X = Intake Backwards");
+            telemetry.addLine("B = AprilTag Align");
+            telemetry.addLine("RT = Intake | LT = Outtake"); // Updated telemetry
             telemetry.update();
         }
     }

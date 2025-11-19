@@ -2,285 +2,280 @@ package org.firstinspires.ftc.teamcode.pedroPathing.Examples;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.geometry.Pose; // Using Pose instead of Point
 import com.pedropathing.paths.PathChain;
 import com.pedropathing.util.Timer;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-import com.qualcomm.robotcore.hardware.DcMotor;
-
-@Autonomous(name = "Close Position Blue", group = "Examples")
+@Autonomous(name = "Close Position Blue - 19 Path Auto", group = "Examples")
 public class ClosePositionBlue extends OpMode {
 
     private Follower follower;
     private Timer delayTimer;
 
-    private int pathState = 0;
-    private boolean delayActive = false;
+    private int pathState = 1;
+    private boolean pathStarted = false;
 
-    // Intake motor reference
     private DcMotor intake;
 
-    // Starting pose
+    // Poses (Positions + Headings)
     private final Pose startPose = new Pose(20.719, 122.763, Math.toRadians(323));
+    private final Pose scorePose = new Pose(60.086, 83.396, Math.toRadians(316));
 
-    // All 13 PathChains
-    private PathChain p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13;
+    // Maintain 19 Paths as requested
+    private PathChain p1, p2, p3, p4, p5, p6, p7, p8, p9, p10;
+    private PathChain p11, p12, p13, p14, p15, p16, p17, p18, p19;
 
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
         delayTimer = new Timer();
 
-        // === Intake Initialization ===
-        intake = hardwareMap.dcMotor.get(Constants.INTAKE_MOTOR_NAME);
-        intake.setDirection(Constants.INTAKE_DIRECTION);
+        intake = hardwareMap.dcMotor.get("intake");
+        intake.setDirection(DcMotorSimple.Direction.FORWARD);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        buildPaths();
         follower.setStartingPose(startPose);
+        buildPaths();
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
     }
 
     private void buildPaths() {
+
+        // P1: Start -> Score Preload
+        // Note: We use "new Pose()" instead of "new Point()" to ensure compatibility
         p1 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(20.719, 122.763), new Pose(60.086, 83.396)))
-                .setLinearHeadingInterpolation(Math.toRadians(323), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(startPose.getX(), startPose.getY(), 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(startPose.getHeading(), scorePose.getHeading())
                 .build();
 
+        // P2: Score -> Strafe Out (Setup for Push)
         p2 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(30.734, 83.396)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(new Pose(scorePose.getX(), scorePose.getY(), 0), new Pose(42.820, 83.396, 0)))
+                .setConstantHeadingInterpolation(scorePose.getHeading())
                 .build();
 
+        // P3: Continue Strafe
         p3 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(30.734, 83.396), new Pose(60.086, 83.396)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(42.820, 83.396, 0), new Pose(36.950, 83.396, 0)))
+                .setConstantHeadingInterpolation(scorePose.getHeading())
                 .build();
 
+        // P4: Continue Strafe to Setup
         p4 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(21.755, 83.396)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(new Pose(36.950, 83.396, 0), new Pose(31.942, 83.396, 0)))
+                .setConstantHeadingInterpolation(scorePose.getHeading())
                 .build();
 
+        // P5: Setup -> Score
         p5 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(21.755, 83.396), new Pose(60.086, 83.396)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(31.942, 83.396, 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), scorePose.getHeading())
                 .build();
 
+        // P6: Score -> Back up to prepare for Sample 1
         p6 = follower.pathBuilder()
-                .addPath(new BezierCurve(new Pose(60.086, 83.396),
-                        new Pose(54.216, 59.568),
-                        new Pose(31.079, 59.568)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(new Pose(scorePose.getX(), scorePose.getY(), 0), new Pose(22.446, 83.741, 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), Math.toRadians(90))
                 .build();
 
+        // P7: Redundant move
         p7 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(31.079, 59.568), new Pose(60.086, 83.568)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(22.446, 83.741, 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(Math.toRadians(90), scorePose.getHeading())
                 .build();
 
+        // P8: Curve to Sample 1
         p8 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.568), new Pose(22.446, 62.331)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierCurve(
+                        new Pose(scorePose.getX(), scorePose.getY(), 0),
+                        new Pose(63.022, 60.259, 0),
+                        new Pose(43.511, 60.604, 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), Math.toRadians(90))
                 .build();
 
+        // P9: Inch forward to Grab Sample 1
         p9 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(22.446, 62.331), new Pose(59.914, 83.741)))
-                .setLinearHeadingInterpolation(Math.toRadians(210), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(43.511, 60.604, 0), new Pose(36.604, 60.604, 0)))
+                .setConstantHeadingInterpolation(Math.toRadians(90))
                 .build();
 
+        // P10: Inch forward more
         p10 = follower.pathBuilder()
-                .addPath(new BezierCurve(new Pose(59.914, 83.741),
-                        new Pose(66.820, 36.777),
-                        new Pose(31.424, 36.432)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(new Pose(36.604, 60.604, 0), new Pose(31.942, 60.604, 0)))
+                .setConstantHeadingInterpolation(Math.toRadians(90))
                 .build();
 
+        // P11: Sample 1 -> Score
         p11 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(31.424, 36.432), new Pose(59.914, 83.568)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(31.942, 60.604, 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(Math.toRadians(90), scorePose.getHeading())
                 .build();
 
+        // P12: Score -> Curve to Sample 2
         p12 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(59.914, 83.568), new Pose(22.791, 39.194)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierCurve(
+                        new Pose(scorePose.getX(), scorePose.getY(), 0),
+                        new Pose(63.022, 59.914, 0),
+                        new Pose(23.482, 59.914, 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), Math.toRadians(90))
                 .build();
 
+        // P13: Sample 2 -> Score
         p13 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(22.791, 39.194), new Pose(59.741, 83.568)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(23.482, 59.914, 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(Math.toRadians(90), scorePose.getHeading())
+                .build();
+
+        // P14: Score -> Curve to Sample 3
+        p14 = follower.pathBuilder()
+                .addPath(new BezierCurve(
+                        new Pose(scorePose.getX(), scorePose.getY(), 0),
+                        new Pose(58.360, 36.086, 0),
+                        new Pose(45.065, 35.914, 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), Math.toRadians(90))
+                .build();
+
+        // P15: Inch forward to Grab Sample 3
+        p15 = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(45.065, 35.914, 0), new Pose(37.813, 35.914, 0)))
+                .setConstantHeadingInterpolation(Math.toRadians(90))
+                .build();
+
+        // P16: Inch forward more
+        p16 = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(37.813, 35.914, 0), new Pose(32.460, 35.914, 0)))
+                .setConstantHeadingInterpolation(Math.toRadians(90))
+                .build();
+
+        // P17: Sample 3 -> Score
+        p17 = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(32.460, 35.914, 0), new Pose(scorePose.getX(), scorePose.getY(), 0)))
+                .setLinearHeadingInterpolation(Math.toRadians(90), scorePose.getHeading())
+                .build();
+
+        // P18: Score -> Park Ascent
+        p18 = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(scorePose.getX(), scorePose.getY(), 0), new Pose(22.446, 39.885, 0)))
+                .setLinearHeadingInterpolation(scorePose.getHeading(), Math.toRadians(229))
+                .build();
+
+        // P19: Park Final Adjustment
+        p19 = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(22.446, 39.885, 0), new Pose(60.086, 83.050, 0)))
+                .setLinearHeadingInterpolation(Math.toRadians(229), Math.toRadians(316))
                 .build();
     }
 
     @Override
     public void start() {
         pathState = 1;
-        follower.followPath(p1);
-        intake.setPower(0);  // Off for path 1
+        pathStarted = false;
+        delayTimer.resetTimer();
     }
 
     @Override
     public void loop() {
-        follower.update();
-        updateStateMachine();
 
-        telemetry.addData("Path State", pathState);
-        telemetry.addData("Delay Active", delayActive);
-        telemetry.addData("Intake Power", intake.getPower());
+        follower.update();
+
+        switch (pathState) {
+            // Delay 1s
+            case 1: runPath(p1, 0.0, 1.0, 1.0); break;
+
+            // Normal
+            case 2: runPath(p2, 0.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 3: runPath(p3, 1.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 4: runPath(p4, 1.0, 0.0, 1.0); break;
+
+            // Delay 1s
+            case 5: runPath(p5, 0.0, 1.0, 1.0); break;
+
+            // Intake On, Slow Mode (0.60)
+            case 6: runPath(p6, 1.0, 0.0, 0.60); break;
+
+            // Delay 1s
+            case 7: runPath(p7, 0.0, 1.0, 1.0); break;
+
+            // Normal
+            case 8: runPath(p8, 0.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 9: runPath(p9, 1.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 10: runPath(p10, 1.0, 0.0, 1.0); break;
+
+            // Delay 1s
+            case 11: runPath(p11, 0.0, 1.0, 1.0); break;
+
+            // Intake On, Slow Mode (0.60)
+            case 12: runPath(p12, 1.0, 0.0, 0.60); break;
+
+            // Delay 1s
+            case 13: runPath(p13, 0.0, 1.0, 1.0); break;
+
+            // Normal
+            case 14: runPath(p14, 0.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 15: runPath(p15, 1.0, 0.0, 1.0); break;
+
+            // Intake On
+            case 16: runPath(p16, 1.0, 0.0, 1.0); break;
+
+            // Delay 1s
+            case 17: runPath(p17, 0.0, 1.0, 1.0); break;
+
+            // Intake On
+            case 18: runPath(p18, 1.0, 0.0, 1.0); break;
+
+            // Delay 1s
+            case 19: runPath(p19, 0.0, 1.0, 1.0); break;
+
+            case 20:
+                intake.setPower(0);
+                telemetry.addData("Status", "Auto Complete");
+                break;
+        }
+
+        telemetry.addData("State", pathState);
+        telemetry.addData("Intake", intake.getPower());
         telemetry.update();
     }
 
-    private void updateStateMachine() {
-
-        // Handle global delay
-        if (delayActive && delayTimer.getElapsedTimeSeconds() >= 1.0) {
-            delayActive = false;
-            pathState++;
+    private void runPath(PathChain path, double intakePower, double delaySeconds, double speedMultiplier) {
+        if (!pathStarted) {
+            // Changed setMovementSpeed to setMaxPower
+            follower.setMaxPower(speedMultiplier);
+            follower.followPath(path);
+            intake.setPower(intakePower);
+            pathStarted = true;
+            delayTimer.resetTimer();
         }
 
-        if (delayActive) {
-            intake.setPower(0); // always off during delays
-            return;
+        if (follower.isBusy()) {
+            // Reset the timer while we are still moving
+            delayTimer.resetTimer();
+        } else {
+            // Only increment state if we are done moving AND the delay has passed
+            if (delayTimer.getElapsedTimeSeconds() >= delaySeconds) {
+                pathState++;
+                pathStarted = false;
+            }
         }
-
-        // === Turn intake ON for paths 2,4,6,8,10,12 ===
-        boolean intakeShouldRun =
-                (pathState == 2 || pathState == 4 || pathState == 6 ||
-                        pathState == 8 || pathState == 10 || pathState == 12);
-
-        intake.setPower(intakeShouldRun ? -1.0 : 0);
-
-        switch (pathState) {
-
-            case 1:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 2:
-                follower.followPath(p2);
-                pathState++;
-                break;
-
-            case 3:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 4:
-                follower.followPath(p3);
-                pathState++;
-                break;
-
-            case 5:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 6:
-                follower.followPath(p4);
-                pathState++;
-                break;
-
-            case 7:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 8:
-                follower.followPath(p5);
-                pathState++;
-                break;
-
-            case 9:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 10:
-                follower.followPath(p6);
-                pathState++;
-                break;
-
-            case 11:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 12:
-                follower.followPath(p7);
-                pathState++;
-                break;
-
-            case 13:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 14:
-                follower.followPath(p8);
-                pathState++;
-                break;
-
-            case 15:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 16:
-                follower.followPath(p9);
-                pathState++;
-                break;
-
-            case 17:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 18:
-                follower.followPath(p10);
-                pathState++;
-                break;
-
-            case 19:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 20:
-                follower.followPath(p11);
-                pathState++;
-                break;
-
-            case 21:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 22:
-                follower.followPath(p12);
-                pathState++;
-                break;
-
-            case 23:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 24:
-                follower.followPath(p13);
-                pathState++;
-                break;
-
-            case 25:
-                if (!follower.isBusy()) triggerDelay();
-                break;
-
-            case 26:
-                intake.setPower(0); // Stop intake at end
-                break;
-        }
-    }
-
-    private void triggerDelay() {
-        delayActive = true;
-        intake.setPower(0);  // Turn off during delay
-        delayTimer.resetTimer();
     }
 }

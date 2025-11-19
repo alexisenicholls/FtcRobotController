@@ -12,16 +12,13 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-// === Limelight Imports ===
+// Limelight
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes.FiducialResult;
 
 import java.util.List;
 
-/**
- * Constants configuration for drivetrain, localization, follower, and Limelight vision.
- */
 public class Constants {
 
     // === Limelight Constants ===
@@ -33,13 +30,13 @@ public class Constants {
     public static final double MAX_ROTATE_SPEED = 0.6;
     public static final double DRIVE_SPEED = 0.5;
 
-    // === Core Follower Constants ===
+    // === Follower Constants ===
     public static FollowerConstants followerConstants = new FollowerConstants()
             .mass(8.16)
             .forwardZeroPowerAcceleration(-40.17214561629185)
             .lateralZeroPowerAcceleration(-54.53313144693408);
 
-    // === Localizer (Odo + IMU) Constants ===
+    // === Localizer Constants ===
     public static ThreeWheelIMUConstants localizerConstants = new ThreeWheelIMUConstants()
             .leftPodY(3)
             .rightPodY(-3)
@@ -72,19 +69,20 @@ public class Constants {
             .xVelocity(57.5110963997171)
             .yVelocity(49.028104086235686);
 
-    // === Intake Motor Constants (ADDED) ===
+    // === Intake Motor Constants ===
     public static final String INTAKE_MOTOR_NAME = "intake";
-    public static final DcMotorSimple.Direction INTAKE_DIRECTION =
-            DcMotorSimple.Direction.REVERSE;
 
-    // === Path Following Constraints ===
+    // Set intake to spin BACKWARD with positive power
+    public static final DcMotorSimple.Direction INTAKE_DIRECTION =
+            DcMotorSimple.Direction.FORWARD;
+
+    // === Path Constraints ===
     public static PathConstraints pathConstraints =
             new PathConstraints(0.99, 100, 1, 1);
 
     // === Follower Builder ===
     public static Follower createFollower(HardwareMap hardwareMap) {
 
-        // initialize limelight once
         if (limelight == null) {
             limelight = hardwareMap.get(Limelight3A.class, "Limelight");
             limelight.setPollRateHz(100);
@@ -105,7 +103,7 @@ public class Constants {
         return limelight.getLatestResult();
     }
 
-    // === AprilTag Helper ===
+    // === Tag Helper ===
     public static FiducialResult getPrimaryAprilTag() {
         LLResult result = getLatestVisionResult();
         if (result != null && result.isValid()) {
