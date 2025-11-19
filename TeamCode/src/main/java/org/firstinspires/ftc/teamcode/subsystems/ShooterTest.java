@@ -88,7 +88,7 @@ public class ShooterTest extends LinearOpMode {
 
             // -----------------------
             // TELEMETRY / DATA
-            // -----------------------
+            // -----------------------Z
             // Calculate angle based on the Max Range variable defined at top
             double currentAngle = hoodPosition * SERVO_MAX_ANGLE;
 
@@ -97,7 +97,7 @@ public class ShooterTest extends LinearOpMode {
             telemetry.addData("Servo Angle", "%.1f deg", currentAngle);
             telemetry.addData("Max Range Set", "%.0f deg", SERVO_MAX_ANGLE);
 
-            // Simple visual helper
+            // Sim                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ple visual helper
             if(shootPower > 0) {
                 telemetry.addData("Status", "FIRING!");
             } else {
