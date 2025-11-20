@@ -32,7 +32,7 @@ public class ShooterTest extends LinearOpMode {
         // HARDWARE MAPPING
         // These names must match what you type in the Driver Station config
         // ------------------------------------------------------------------
-        shooterMotor  = hardwareMap.get(DcMotor.class, "shooter_motor");
+        shooterMotor  = hardwareMap.get(DcMotor.class, "shooter");
         hoodServoLeft = hardwareMap.get(Servo.class, "left_servo");
         hoodServoRight = hardwareMap.get(Servo.class, "right_servo");
 
@@ -42,7 +42,7 @@ public class ShooterTest extends LinearOpMode {
         shooterMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
         // Check your motor direction. If it spins the wrong way, change to REVERSE
-        shooterMotor.setDirection(DcMotor.Direction.FORWARD);
+        shooterMotor.setDirection(DcMotor.Direction.REVERSE);
 
         // SERVO SETUP
         // Hoods usually have mirrored servos. We reverse one so they move together.

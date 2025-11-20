@@ -88,11 +88,8 @@ public class DriveIntakeShooter extends LinearOpMode {
 
         // Shooter setup
         shooterMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        shooterMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+        shooterMotor.setDirection(DcMotorSimple.Direction.REVERSE); // Reversed now
         shooterMotor.setVelocityPIDFCoefficients(kP, kI, kD, kF);
-
-        // Shooter timer (for 1s/2s shoot buttons)
-        ElapsedTime shooterTimer = new ElapsedTime();
 
         telemetry.addLine("READY — G1: Drive + Align | G2: Intake + Shooter");
         telemetry.update();
@@ -105,10 +102,11 @@ public class DriveIntakeShooter extends LinearOpMode {
         boolean shooter1WasPressed = false; // 1s shoot
         boolean shooter2WasPressed = false; // 2s shoot
 
+        ElapsedTime shooterTimer = new ElapsedTime();
+
         while (opModeIsActive()) {
 
             // ---------- GAMEPAD 1: DRIVE + LIMELIGHT ALIGN ----------
-
             double y = -gamepad1.left_stick_y;
             double x = gamepad1.left_stick_x;
             double rx = gamepad1.right_stick_x;
@@ -186,10 +184,9 @@ public class DriveIntakeShooter extends LinearOpMode {
 
             // Shooter hold (Right Trigger)
             if (gamepad2.right_trigger > 0.1) {
-                shooterMotor.setVelocity(SHOOTER_TARGET_VELOCITY);
-            } else if (gamepad2.right_bumper) {
-                // Stop shooter immediately
-                shooterMotor.setVelocity(0);
+                shooterMotor.setVelocity(SHOOTER_TARGET_VELOCITY); // Spins while held
+            } else {
+                shooterMotor.setVelocity(0); // Stops immediately on release
             }
 
             // Shooter 1s full power (Button A)
@@ -233,7 +230,7 @@ public class DriveIntakeShooter extends LinearOpMode {
 
             telemetry.addLine("--- BUTTON INFO ---");
             telemetry.addLine("G1: A=IMU reset | B=AprilTag Align");
-            telemetry.addLine("G2: LT=Intake | LB=Outtake | RT=Hold Shooter | RB=Stop Shooter");
+            telemetry.addLine("G2: LT=Intake | LB=Outtake | RT=Hold Shooter");
             telemetry.addLine("G2: A=1s Full Shoot | B=2s Full Shoot");
 
             telemetry.update();
