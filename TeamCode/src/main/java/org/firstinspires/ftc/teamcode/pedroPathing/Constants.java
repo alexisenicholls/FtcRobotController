@@ -11,6 +11,8 @@ import com.pedropathing.paths.PathConstraints;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 
 // Limelight
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -71,10 +73,29 @@ public class Constants {
 
     // === Intake Motor Constants ===
     public static final String INTAKE_MOTOR_NAME = "intake";
-
-    // Set intake to spin BACKWARD with positive power
     public static final DcMotorSimple.Direction INTAKE_DIRECTION =
             DcMotorSimple.Direction.FORWARD;
+
+    // === Shooter Motor Constants (PIDF) ===
+    public static final String SHOOTER_MOTOR_NAME = "shooter";
+
+    public static final DcMotorSimple.Direction SHOOTER_DIRECTION =
+            DcMotorSimple.Direction.FORWARD;
+
+    // Shooter specs
+    public static final double SHOOTER_WHEEL_DIAMETER_INCH = 4.0;
+    public static final double SHOOTER_GEAR_RATIO = (18.0 / 24.0);
+    public static final double SHOOTER_MAX_MOTOR_RPM = 6000.0;
+
+    // Calculated shooter RPM (motor → wheel)
+    public static final double SHOOTER_MAX_WHEEL_RPM =
+            SHOOTER_MAX_MOTOR_RPM * SHOOTER_GEAR_RATIO;
+
+    // PIDF for velocity control
+    public static final double SHOOTER_kP = 20.0;
+    public static final double SHOOTER_kI = 0.2;
+    public static final double SHOOTER_kD = 1.5;
+    public static final double SHOOTER_kF = 32767.0 / SHOOTER_MAX_WHEEL_RPM;
 
     // === Path Constraints ===
     public static PathConstraints pathConstraints =
