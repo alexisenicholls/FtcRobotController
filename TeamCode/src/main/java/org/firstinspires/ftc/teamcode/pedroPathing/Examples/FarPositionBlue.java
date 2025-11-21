@@ -2,9 +2,10 @@ package org.firstinspires.ftc.teamcode.pedroPathing.Examples;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.BezierLine;
@@ -15,222 +16,252 @@ import com.pedropathing.util.Timer;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-@Autonomous(name = "15-Path Auto With Intake", group = "Examples")
+@Autonomous(name = "FarPositionAuto", group = "Examples")
 public class FarPositionBlue extends OpMode {
 
     private Follower follower;
     private Timer delayTimer;
-    private int pathState = 1;
+    private Timer spinUpTimer;
+    private Timer fireTimer;
+    private boolean shotFiredInThisDelay = false;
+
+    private int pathState = 0;
     private boolean pathStarted = false;
 
     private DcMotor intake;
+    private DcMotorEx shooter;
 
-    // === PATHS ===
-    private PathChain p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15;
+    private final Pose startPose = new Pose(56.0, 8.0, 0.0);
+
+    private PathChain[] paths;
+    private boolean[] intakePaths; // true if intake should run
+    private double[] delays;
+
+    private final double normalSpeed = 1.0;
+    private final double intakePathSpeed = 0.6; // 60% speed on intake paths
+
+    // Shooter control settings
+    private final double TARGET_WHEEL_RPM = 3200.0;    // far shooting RPM
+    private final double READY_PERCENT = 0.95;         // 95% threshold
+    private final double SPINUP_FAILSAFE_SEC = 2.0;    // 2s spin-up before firing
+    private final double FIRE_DURATION_SEC = 0.75;     // firing duration
 
     @Override
     public void init() {
-
         follower = Constants.createFollower(hardwareMap);
         delayTimer = new Timer();
+        spinUpTimer = new Timer();
+        fireTimer = new Timer();
 
-        // === Intake motor setup ===
         intake = hardwareMap.dcMotor.get("intake");
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        buildPaths();
+        shooter = hardwareMap.get(DcMotorEx.class, Constants.SHOOTER_MOTOR_NAME);
+        shooter.setDirection(Constants.SHOOTER_DIRECTION);
+        shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        shooter.setPIDFCoefficients(
+                DcMotor.RunMode.RUN_USING_ENCODER,
+                new PIDFCoefficients(Constants.SHOOTER_kP,
+                        Constants.SHOOTER_kI,
+                        Constants.SHOOTER_kD,
+                        Constants.SHOOTER_kF)
+        );
 
-        // Set ANY starting pose you want — you're using static paths already
-        follower.setStartingPose(new Pose(56, 8, Math.toRadians(90)));
+        follower.setStartingPose(startPose);
+        buildPaths();
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
     }
 
+    private void spinShooterWheelRPM(double wheelRpm) {
+        double motorRpm = wheelRpm / Constants.SHOOTER_GEAR_RATIO;
+        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
+        double velocityTicksPerSec = (motorRpm / 60.0) * ticksPerRev;
+        shooter.setVelocity(velocityTicksPerSec);
+    }
+
+    private void stopShooter() {
+        shooter.setVelocity(0);
+    }
+
+    private double getCurrentWheelRPM() {
+        double ticksPerSec = shooter.getVelocity();
+        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
+        double motorRpm = (ticksPerSec * 60.0) / ticksPerRev;
+        return motorRpm * Constants.SHOOTER_GEAR_RATIO;
+    }
+
     private void buildPaths() {
+        paths = new PathChain[10];
+        intakePaths = new boolean[10];
+        delays = new double[10];
 
-        p1 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(56.000, 8.000), new Pose(60.086, 21.065)))
-                .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(295))
-                .build();
-
-        p2 = follower.pathBuilder()
-                .addPath(new BezierCurve(
-                        new Pose(60.086, 21.065),
-                        new Pose(60.777, 35.741),
-                        new Pose(41.266, 35.741)))
+        // ---- PATH 1 ----
+        paths[0] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(56.0, 8.0), new Pose(55.770, 16.748)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[0] = false;
+        delays[0] = 0.0;
 
-        p3 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(41.266, 35.741), new Pose(37.640, 35.741)))
+        // ---- PATH 2 ---- Shooter + delay
+        paths[1] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(55.770, 16.748), new Pose(59.741, 16.921)))
+                .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(294))
+                .build();
+        intakePaths[1] = false;
+        delays[1] = SPINUP_FAILSAFE_SEC; // shooter delay
+
+        // ---- PATH 3 ----
+        paths[2] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(59.741, 16.921), new Pose(59.568, 35.568)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[2] = false;
+        delays[2] = 0.0;
 
-        p4 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(37.640, 35.741), new Pose(33.151, 35.741)))
+        // ---- PATH 4 ---- Intake path
+        paths[3] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(59.568, 35.568), new Pose(32.806, 35.396)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[3] = true;
+        delays[3] = 0.0;
 
-        p5 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(33.151, 35.741), new Pose(60.086, 20.892)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(295))
+        // ---- PATH 5 ---- Shooter + delay
+        paths[4] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(32.806, 35.396), new Pose(59.914, 16.748)))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(294))
                 .build();
+        intakePaths[4] = false;
+        delays[4] = SPINUP_FAILSAFE_SEC;
 
-        p6 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 20.892), new Pose(26.245, 32.978)))
+        // ---- PATH 6 ----
+        paths[5] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(59.914, 16.748), new Pose(59.568, 35.741)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[5] = false;
+        delays[5] = 0.0;
 
-        p7 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(26.245, 32.978), new Pose(60.086, 20.892)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(295))
-                .build();
-
-        p8 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 20.892), new Pose(15.367, 13.813)))
-                .setLinearHeadingInterpolation(Math.toRadians(20), Math.toRadians(180))
-                .build();
-
-        p9 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(15.367, 13.813), new Pose(11.050, 13.468)))
+        // ---- PATH 7 ---- Intake path
+        paths[6] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(59.568, 35.741), new Pose(27.281, 35.914)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[6] = true;
+        delays[6] = 0.0;
 
-        p10 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(11.050, 13.468), new Pose(16.921, 11.568)))
+        // ---- PATH 8 ---- Shooter + delay
+        paths[7] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(27.281, 35.914), new Pose(59.741, 16.748)))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(294))
+                .build();
+        intakePaths[7] = false;
+        delays[7] = SPINUP_FAILSAFE_SEC;
+
+        // ---- PATH 9 ---- Intake path
+        paths[8] = follower.pathBuilder()
+                .addPath(new BezierCurve(new Pose(59.741, 16.748), new Pose(41.784, 11.914), new Pose(12.259, 11.396)))
                 .setTangentHeadingInterpolation()
                 .build();
+        intakePaths[8] = true;
+        delays[8] = 0.0;
 
-        p11 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(16.921, 11.568), new Pose(10.705, 10.878)))
-                .setTangentHeadingInterpolation()
+        // ---- PATH 10 ---- Shooter + delay
+        paths[9] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(12.259, 11.396), new Pose(59.741, 16.748)))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(294))
                 .build();
-
-        p12 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(10.705, 10.878), new Pose(60.259, 20.892)))
-                .setLinearHeadingInterpolation(Math.toRadians(195), Math.toRadians(295))
-                .build();
-
-        p13 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.259, 20.892), new Pose(9.669, 22.273)))
-                .setTangentHeadingInterpolation()
-                .build();
-
-        p14 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(9.669, 22.273), new Pose(10.878, 11.396)))
-                .setTangentHeadingInterpolation()
-                .build();
-
-        p15 = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(10.878, 11.396), new Pose(60.432, 20.892)))
-                .setLinearHeadingInterpolation(Math.toRadians(274), Math.toRadians(295))
-                .build();
+        intakePaths[9] = false;
+        delays[9] = SPINUP_FAILSAFE_SEC;
     }
 
     @Override
     public void start() {
-        pathState = 1;
+        pathState = 0;
         pathStarted = false;
         delayTimer.resetTimer();
+        spinUpTimer.resetTimer();
+        fireTimer.resetTimer();
+        shotFiredInThisDelay = false;
     }
 
     @Override
     public void loop() {
-
         follower.update();
 
-        switch (pathState) {
+        if (pathState < paths.length) {
+            boolean isIntakePath = intakePaths[pathState];
+            double delaySec = delays[pathState];
+            double speed = isIntakePath ? intakePathSpeed : normalSpeed;
 
-            case 1:
-                runPath(p1, 0, 1.0);  // Delay path
-                break;
-
-            case 2:
-                runPath(p2, 0, 0);
-                break;
-
-            case 3:
-                runPath(p3, 1.0, 0);  // Intake ON
-                break;
-
-            case 4:
-                runPath(p4, 1.0, 0);  // Intake ON
-                break;
-
-            case 5:
-                runPath(p5, 0, 1.0);  // Delay path
-                break;
-
-            case 6:
-                runPath(p6, 1.0, 0);  // Intake ON
-                break;
-
-            case 7:
-                runPath(p7, 0, 1.0);  // Delay path
-                break;
-
-            case 8:
-                runPath(p8, 0, 0);
-                break;
-
-            case 9:
-                runPath(p9, 1.0, 0);  // Intake ON
-                break;
-
-            case 10:
-                runPath(p10, 0, 0);
-                break;
-
-            case 11:
-                runPath(p11, 1.0, 0);  // Intake ON
-                break;
-
-            case 12:
-                runPath(p12, 0, 1.0);  // Delay path
-                break;
-
-            case 13:
-                runPath(p13, 0, 0);
-                break;
-
-            case 14:
-                runPath(p14, 1.0, 0);  // Intake ON
-                break;
-
-            case 15:
-                runPath(p15, 0, 1.0);  // Delay path
-                break;
-
-            case 16:
-                intake.setPower(0);
-                telemetry.addData("Status", "Auto Complete");
-                break;
+            runPath(paths[pathState], isIntakePath, delaySec, speed);
+        } else {
+            intake.setPower(0);
+            stopShooter();
+            telemetry.addData("Status", "Auto Complete");
         }
 
-        telemetry.addData("Path", pathState);
+        telemetry.addData("Path", pathState + 1);
         telemetry.addData("Intake Power", intake.getPower());
+        telemetry.addData("Shooter RPM", String.format("%.1f", getCurrentWheelRPM()));
         telemetry.update();
     }
 
-    // === CLEAN HELPER ===
-    private void runPath(PathChain path, double intakePower, double delaySeconds) {
+    private void runPath(PathChain path, boolean isIntakePath, double delaySeconds, double speed) {
+
+        follower.setMaxPower(speed);
 
         if (!pathStarted) {
             follower.followPath(path);
-            intake.setPower(intakePower);
+            intake.setPower(isIntakePath ? 1.0 : 0.0);
+            stopShooter();
+
             pathStarted = true;
             delayTimer.resetTimer();
+            spinUpTimer.resetTimer();
+            fireTimer.resetTimer();
+            shotFiredInThisDelay = false;
         }
 
         if (follower.isBusy()) {
             delayTimer.resetTimer();
+            stopShooter();
+            shotFiredInThisDelay = false;
         } else {
-
-            if (delayTimer.getElapsedTimeSeconds() >= delaySeconds) {
+            if (delaySeconds <= 0.0) {
                 pathState++;
                 pathStarted = false;
+                stopShooter();
+                intake.setPower(0);
+                return;
+            }
+
+            double elapsed = delayTimer.getElapsedTimeSeconds();
+
+            if (!shotFiredInThisDelay) {
+                spinShooterWheelRPM(TARGET_WHEEL_RPM);
+                boolean atTarget = getCurrentWheelRPM() >= (READY_PERCENT * TARGET_WHEEL_RPM);
+                boolean spinUpDone = spinUpTimer.getElapsedTimeSeconds() >= SPINUP_FAILSAFE_SEC;
+                boolean delayExpired = elapsed >= delaySeconds;
+
+                if (atTarget || spinUpDone || delayExpired) {
+                    intake.setPower(1.0);
+                    fireTimer.resetTimer();
+                    shotFiredInThisDelay = true;
+                }
+            } else {
+                if (fireTimer.getElapsedTimeSeconds() >= FIRE_DURATION_SEC) {
+                    stopShooter();
+                    intake.setPower(0);
+                    pathState++;
+                    pathStarted = false;
+                } else {
+                    spinShooterWheelRPM(TARGET_WHEEL_RPM);
+                }
             }
         }
     }

@@ -22,7 +22,6 @@ public class ClosePositionBlue extends OpMode {
     private Follower follower;
     private Timer delayTimer;
 
-    // Additional timers + flags for shooter spin-up and firing
     private Timer spinUpTimer;
     private Timer fireTimer;
     private boolean shotFiredInThisDelay = false;
@@ -36,17 +35,17 @@ public class ClosePositionBlue extends OpMode {
     private final Pose startPose = new Pose(20.719, 122.763, Math.toRadians(323));
 
     private PathChain[] paths;
-    private double[] intakePowers;
+    private boolean[] intakePaths; // true if intake should run
     private double[] delays;
 
     private final double normalSpeed = 1.0;
-    private final double intakeSpeed = 0.6;
+    private final double intakePathSpeed = 0.6; // 50% speed on intake paths
 
-    // Shooter control settings requested
-    private final double TARGET_WHEEL_RPM = 3000.0;       // wheel RPM goal (user requested)
+    // Shooter control settings
+    private final double TARGET_WHEEL_RPM = 3000.0;       // wheel RPM goal
     private final double READY_PERCENT = 0.95;           // 95% threshold
     private final double SPINUP_FAILSAFE_SEC = 3.0;      // after 3s, shoot anyway
-    private final double FIRE_DURATION_SEC = 0.5;        // how long to run intake to feed projectile
+    private final double FIRE_DURATION_SEC = 0.75;        // how long to run intake to feed projectile
 
     @Override
     public void init() {
@@ -60,13 +59,11 @@ public class ClosePositionBlue extends OpMode {
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // === SHOOTER MOTOR ===
-        // Uses the name defined in Constants (you previously added this)
+        // Shooter
         shooter = hardwareMap.get(DcMotorEx.class, Constants.SHOOTER_MOTOR_NAME);
         shooter.setDirection(Constants.SHOOTER_DIRECTION);
         shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        // Apply PIDF from Constants (assumes you've got those fields in Constants)
         shooter.setPIDFCoefficients(
                 DcMotor.RunMode.RUN_USING_ENCODER,
                 new PIDFCoefficients(
@@ -86,9 +83,7 @@ public class ClosePositionBlue extends OpMode {
 
     // Helper: set motor velocity to achieve desired wheel RPM (converts through gear ratio)
     private void spinShooterWheelRPM(double wheelRpm) {
-        // motorRPM = wheelRPM / gearRatio  (because wheelRPM = motorRPM * gearRatio)
         double motorRpm = wheelRpm / Constants.SHOOTER_GEAR_RATIO;
-
         double ticksPerRev = shooter.getMotorType().getTicksPerRev();
         double velocityTicksPerSec = (motorRpm / 60.0) * ticksPerRev;  // motor ticks/sec
         shooter.setVelocity(velocityTicksPerSec);
@@ -110,7 +105,7 @@ public class ClosePositionBlue extends OpMode {
 
     private void buildPaths() {
         paths = new PathChain[10];
-        intakePowers = new double[10];
+        intakePaths = new boolean[10];
         delays = new double[10];
 
         // ---- PATH 1 ----
@@ -118,7 +113,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(20.719, 122.763), new Pose(60.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(323), Math.toRadians(316))
                 .build();
-        intakePowers[0] = 0.0;
+        intakePaths[0] = false;
         delays[0] = 1.5;
 
         // ---- PATH 2 ----
@@ -126,7 +121,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(33.151, 83.568)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[1] = 0.5;
+        intakePaths[1] = true;    // intake path
         delays[1] = 0.0;
 
         // ---- PATH 3 ----
@@ -134,7 +129,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(33.151, 83.568), new Pose(60.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
                 .build();
-        intakePowers[2] = 0.0;
+        intakePaths[2] = false;
         delays[2] = 1.5;
 
         // ---- PATH 4 ----
@@ -142,7 +137,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(25.554, 84.086)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[3] = 0.5;
+        intakePaths[3] = true;    // intake path
         delays[3] = 0.0;
 
         // ---- PATH 5 ----
@@ -150,7 +145,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(25.554, 84.086), new Pose(60.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
                 .build();
-        intakePowers[4] = 0.0;
+        intakePaths[4] = false;
         delays[4] = 1.5;
 
         // ---- PATH 6 ----
@@ -158,7 +153,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(59.568, 59.914)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[5] = 0.0;
+        intakePaths[5] = true;    // intake path
         delays[5] = 0.0;
 
         // ---- PATH 7 ----
@@ -166,7 +161,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(59.568, 59.914), new Pose(33.151, 59.741)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[6] = 0.5;
+        intakePaths[6] = true;    // intake path
         delays[6] = 0.0;
 
         // ---- PATH 8 ----
@@ -174,7 +169,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(33.151, 59.741), new Pose(60.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
                 .build();
-        intakePowers[7] = 0.0;
+        intakePaths[7] = false;
         delays[7] = 1.5;
 
         // ---- PATH 9 ----
@@ -185,7 +180,7 @@ public class ClosePositionBlue extends OpMode {
                         new Pose(27.799, 59.741)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[8] = 0.5;
+        intakePaths[8] = true;    // intake path
         delays[8] = 0.0;
 
         // ---- PATH 10 ----
@@ -193,7 +188,7 @@ public class ClosePositionBlue extends OpMode {
                 .addPath(new BezierLine(new Pose(27.799, 59.741), new Pose(60.086, 83.223)))
                 .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
                 .build();
-        intakePowers[9] = 0.0;
+        intakePaths[9] = false;
         delays[9] = 1.5;
     }
 
@@ -212,53 +207,65 @@ public class ClosePositionBlue extends OpMode {
         follower.update();
 
         if (pathState < paths.length) {
-            double intakePower = intakePowers[pathState];
+            boolean isIntakePath = intakePaths[pathState];
             double delaySec = delays[pathState];
-            double speed = (intakePower > 0) ? intakeSpeed : normalSpeed;
 
-            runPath(paths[pathState], intakePower, delaySec, speed);
+            // dynamic speed: slow on intake paths OR while firing
+            double speed = (isIntakePath || shotFiredInThisDelay) ? intakePathSpeed : normalSpeed;
+
+            // pass the computed speed into runPath so follower.setMaxPower() uses it
+            runPath(paths[pathState], isIntakePath, delaySec, speed);
         } else {
             intake.setPower(0);
             stopShooter();
             telemetry.addData("Status", "Auto Complete");
         }
 
-        // Telemetry helpful for tuning
         telemetry.addData("Path", pathState + 1);
         telemetry.addData("Intake Power", intake.getPower());
         telemetry.addData("Shooter Wheel RPM", String.format("%.1f", getCurrentWheelRPM()));
         telemetry.update();
     }
 
-    private void runPath(PathChain path, double intakePower, double delaySeconds, double speed) {
+    private void runPath(PathChain path, boolean isIntakePath, double delaySeconds, double speed) {
 
+        // set follower max power according to computed speed from loop()
         follower.setMaxPower(speed);
 
-        // Start path
+        // Start path if not already started
         if (!pathStarted) {
             follower.followPath(path);
-            intake.setPower(intakePower);
+
+            // Intake: ALWAYS 100% when this path is an intake path
+            intake.setPower(isIntakePath ? 1.0 : 0.0);
+
+            // make sure shooter is off while driving
             stopShooter();
+
             pathStarted = true;
             delayTimer.resetTimer();
 
-            // reset spin/firing flags for this path
+            // reset timers/flags for the upcoming delay/shoot sequence
             spinUpTimer.resetTimer();
             fireTimer.resetTimer();
             shotFiredInThisDelay = false;
         }
 
-        // Robot still moving
+        // While follower is still moving, keep resetting the delay timer so that delay only counts after movement done
         if (follower.isBusy()) {
-            // If robot is still moving, reset delay and ensure shooter is not spinning
+            // Reset the delay timer while we're still moving
             delayTimer.resetTimer();
+
+            // keep shooter stopped while moving (you requested this behavior)
             stopShooter();
+
+            // ensure shot flag cleared while moving
             shotFiredInThisDelay = false;
         }
         else {
-            // Robot finished path → enter delay
+            // follower finished the path → begin delay / shooting logic
             if (delaySeconds <= 0.0) {
-                // No delay → immediately advance
+                // No delay configured: advance immediately
                 pathState++;
                 pathStarted = false;
                 stopShooter();
@@ -266,28 +273,28 @@ public class ClosePositionBlue extends OpMode {
                 return;
             }
 
-            // We are inside the delay time window
             double elapsed = delayTimer.getElapsedTimeSeconds();
 
+            // If we haven't fired in this delay yet, attempt to get shooter ready then fire
             if (!shotFiredInThisDelay) {
-                // 1) Spin shooter continuously during the delay
+                // Start spinning shooter continuously during the delay window
                 spinShooterWheelRPM(TARGET_WHEEL_RPM);
 
-                // 2) Check readiness: either RPM reached OR spinUp timeout reached OR overall delay expired
+                // Read current RPM, check readiness or spinup failsafe or delay expiration
                 double currentWheelRpm = getCurrentWheelRPM();
                 boolean atTarget = currentWheelRpm >= (READY_PERCENT * TARGET_WHEEL_RPM);
                 boolean spinUpTimeout = spinUpTimer.getElapsedTimeSeconds() >= SPINUP_FAILSAFE_SEC;
                 boolean delayExpired = elapsed >= delaySeconds;
 
                 if (atTarget || spinUpTimeout || delayExpired) {
-                    // Start the firing action: run intake motor to feed projectile
-                    intake.setPower(intakeSpeed); // feed at intakeSpeed
+                    // Begin firing: run intake at full power to feed projectile
+                    intake.setPower(1.0); // always feed at full power during firing
                     fireTimer.resetTimer();
-                    shotFiredInThisDelay = true; // mark that firing started (we'll finish firing in next branch)
+                    shotFiredInThisDelay = true;
                 }
             }
             else {
-                // We already started firing; wait for firing duration to finish then stop and advance
+                // We already started firing; wait for firing duration to complete
                 if (fireTimer.getElapsedTimeSeconds() >= FIRE_DURATION_SEC) {
                     // stop shooter + intake and proceed to next path
                     stopShooter();
@@ -295,7 +302,7 @@ public class ClosePositionBlue extends OpMode {
                     pathState++;
                     pathStarted = false;
                 } else {
-                    // keep shooter spinning and intake running during the firing window
+                    // keep shooter spinning and intake running during firing window
                     spinShooterWheelRPM(TARGET_WHEEL_RPM);
                 }
             }

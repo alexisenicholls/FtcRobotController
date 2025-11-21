@@ -4,6 +4,8 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.BezierLine;
@@ -19,44 +21,83 @@ public class ClosePositionRed extends OpMode {
 
     private Follower follower;
     private Timer delayTimer;
-    private int pathState = 0;  // Current path index (0-9)
+    private Timer spinUpTimer;
+    private Timer fireTimer;
+    private boolean shotFiredInThisDelay = false;
 
+    private int pathState = 0;
     private boolean pathStarted = false;
 
     private DcMotor intake;
+    private DcMotorEx shooter;
 
-    // Updated start pose to match red logic
     private final Pose startPose = new Pose(123.626, 122.763, Math.toRadians(216));
 
     private PathChain[] paths;
-    private double[] intakePowers;
+    private boolean[] intakePaths;
     private double[] delays;
 
     private final double normalSpeed = 1.0;
-    private final double intakeSpeed = 0.6;
+    private final double intakePathSpeed = 0.6; // slow speed on intake paths
+
+    // Shooter settings
+    private final double TARGET_WHEEL_RPM = 3000.0;
+    private final double READY_PERCENT = 0.95;
+    private final double SPINUP_FAILSAFE_SEC = 3.0;
+    private final double FIRE_DURATION_SEC = 0.75;
 
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
         delayTimer = new Timer();
+        spinUpTimer = new Timer();
+        fireTimer = new Timer();
 
+        // Intake
         intake = hardwareMap.dcMotor.get("intake");
         intake.setDirection(DcMotorSimple.Direction.FORWARD);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        follower.setStartingPose(startPose);
+        // Shooter
+        shooter = hardwareMap.get(DcMotorEx.class, Constants.SHOOTER_MOTOR_NAME);
+        shooter.setDirection(Constants.SHOOTER_DIRECTION);
+        shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        shooter.setPIDFCoefficients(
+                DcMotor.RunMode.RUN_USING_ENCODER,
+                new PIDFCoefficients(Constants.SHOOTER_kP,
+                        Constants.SHOOTER_kI,
+                        Constants.SHOOTER_kD,
+                        Constants.SHOOTER_kF)
+        );
 
-        // --- Build paths ---
+        follower.setStartingPose(startPose);
         buildPaths();
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
     }
 
-    private void buildPaths() {
+    private void spinShooterWheelRPM(double wheelRpm) {
+        double motorRpm = wheelRpm / Constants.SHOOTER_GEAR_RATIO;
+        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
+        double velocityTicksPerSec = (motorRpm / 60.0) * ticksPerRev;
+        shooter.setVelocity(velocityTicksPerSec);
+    }
 
+    private void stopShooter() {
+        shooter.setVelocity(0);
+    }
+
+    private double getCurrentWheelRPM() {
+        double ticksPerSec = shooter.getVelocity();
+        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
+        double motorRpm = (ticksPerSec * 60.0) / ticksPerRev;
+        return motorRpm * Constants.SHOOTER_GEAR_RATIO;
+    }
+
+    private void buildPaths() {
         paths = new PathChain[10];
-        intakePowers = new double[10];
+        intakePaths = new boolean[10];
         delays = new double[10];
 
         // ---- PATH 1 ----
@@ -64,15 +105,15 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(123.626, 122.763), new Pose(83.914, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(216), Math.toRadians(229))
                 .build();
-        intakePowers[0] = 0.0;
-        delays[0] = 1.0;
+        intakePaths[0] = false;
+        delays[0] = 1.5;
 
         // ---- PATH 2 ----
         paths[1] = follower.pathBuilder()
                 .addPath(new BezierLine(new Pose(83.914, 83.396), new Pose(111.540, 83.396)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[1] = 0.5;
+        intakePaths[1] = true;
         delays[1] = 0.0;
 
         // ---- PATH 3 ----
@@ -80,15 +121,15 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(111.540, 83.396), new Pose(83.914, 83.223)))
                 .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(229))
                 .build();
-        intakePowers[2] = 0.0;
-        delays[2] = 1.0;
+        intakePaths[2] = false;
+        delays[2] = 1.5;
 
         // ---- PATH 4 ----
         paths[3] = follower.pathBuilder()
                 .addPath(new BezierLine(new Pose(83.914, 83.223), new Pose(117.237, 83.223)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[3] = 0.5;
+        intakePaths[3] = true;
         delays[3] = 0.0;
 
         // ---- PATH 5 ----
@@ -96,15 +137,15 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(117.237, 83.223), new Pose(84.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(229))
                 .build();
-        intakePowers[4] = 0.0;
-        delays[4] = 1.0;
+        intakePaths[4] = false;
+        delays[4] = 1.5;
 
         // ---- PATH 6 ----
         paths[5] = follower.pathBuilder()
                 .addPath(new BezierLine(new Pose(84.086, 83.396), new Pose(83.914, 59.050)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[5] = 0.0;
+        intakePaths[5] = true;
         delays[5] = 0.0;
 
         // ---- PATH 7 ----
@@ -112,7 +153,7 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(83.914, 59.050), new Pose(111.022, 59.223)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[6] = 0.5;
+        intakePaths[6] = true;
         delays[6] = 0.0;
 
         // ---- PATH 8 ----
@@ -120,8 +161,8 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(111.022, 59.223), new Pose(83.914, 83.223)))
                 .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(229))
                 .build();
-        intakePowers[7] = 0.0;
-        delays[7] = 1.0;
+        intakePaths[7] = false;
+        delays[7] = 1.5;
 
         // ---- PATH 9 ----
         paths[8] = follower.pathBuilder()
@@ -131,7 +172,7 @@ public class ClosePositionRed extends OpMode {
                         new Pose(116.719, 59.223)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePowers[8] = 0.5;
+        intakePaths[8] = true;
         delays[8] = 0.0;
 
         // ---- PATH 10 ----
@@ -139,8 +180,8 @@ public class ClosePositionRed extends OpMode {
                 .addPath(new BezierLine(new Pose(116.719, 59.223), new Pose(83.914, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(229))
                 .build();
-        intakePowers[9] = 0.0;
-        delays[9] = 1.0;
+        intakePaths[9] = false;
+        delays[9] = 1.5;
     }
 
     @Override
@@ -148,6 +189,9 @@ public class ClosePositionRed extends OpMode {
         pathState = 0;
         pathStarted = false;
         delayTimer.resetTimer();
+        spinUpTimer.resetTimer();
+        fireTimer.resetTimer();
+        shotFiredInThisDelay = false;
     }
 
     @Override
@@ -155,38 +199,66 @@ public class ClosePositionRed extends OpMode {
         follower.update();
 
         if (pathState < paths.length) {
-            double intakePower = intakePowers[pathState];
+            boolean isIntakePath = intakePaths[pathState];
             double delaySec = delays[pathState];
-            double speed = (intakePower > 0) ? intakeSpeed : normalSpeed;
 
-            runPath(paths[pathState], intakePower, delaySec, speed);
+            double speed = (isIntakePath || shotFiredInThisDelay) ? intakePathSpeed : normalSpeed;
+
+            runPath(paths[pathState], isIntakePath, delaySec, speed);
         } else {
             intake.setPower(0);
+            stopShooter();
             telemetry.addData("Status", "Auto Complete");
         }
 
         telemetry.addData("Path", pathState + 1);
         telemetry.addData("Intake Power", intake.getPower());
+        telemetry.addData("Shooter Wheel RPM", String.format("%.1f", getCurrentWheelRPM()));
         telemetry.update();
     }
 
-    private void runPath(PathChain path, double intakePower, double delaySeconds, double speed) {
+    private void runPath(PathChain path, boolean isIntakePath, double delaySeconds, double speed) {
 
         follower.setMaxPower(speed);
 
         if (!pathStarted) {
             follower.followPath(path);
-            intake.setPower(intakePower);
+            intake.setPower(isIntakePath ? 1.0 : 0.0);
+            stopShooter();
             pathStarted = true;
             delayTimer.resetTimer();
+            spinUpTimer.resetTimer();
+            fireTimer.resetTimer();
+            shotFiredInThisDelay = false;
         }
 
         if (follower.isBusy()) {
             delayTimer.resetTimer();
+            stopShooter();
+            shotFiredInThisDelay = false;
         } else {
-            if (delayTimer.getElapsedTimeSeconds() >= delaySeconds) {
-                pathState++;
-                pathStarted = false;
+            if (!shotFiredInThisDelay) {
+                spinShooterWheelRPM(TARGET_WHEEL_RPM);
+
+                double currentWheelRpm = getCurrentWheelRPM();
+                boolean atTarget = currentWheelRpm >= (READY_PERCENT * TARGET_WHEEL_RPM);
+                boolean spinUpTimeout = spinUpTimer.getElapsedTimeSeconds() >= SPINUP_FAILSAFE_SEC;
+                boolean delayExpired = delayTimer.getElapsedTimeSeconds() >= delaySeconds;
+
+                if (atTarget || spinUpTimeout || delayExpired) {
+                    intake.setPower(1.0);
+                    fireTimer.resetTimer();
+                    shotFiredInThisDelay = true;
+                }
+            } else {
+                if (fireTimer.getElapsedTimeSeconds() >= FIRE_DURATION_SEC) {
+                    stopShooter();
+                    intake.setPower(0);
+                    pathState++;
+                    pathStarted = false;
+                } else {
+                    spinShooterWheelRPM(TARGET_WHEEL_RPM);
+                }
             }
         }
     }
