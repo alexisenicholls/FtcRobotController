@@ -32,7 +32,9 @@ public class ShooterTest extends LinearOpMode {
         // HARDWARE MAPPING
         // These names must match what you type in the Driver Station config
         // ------------------------------------------------------------------
-        shooterMotor  = hardwareMap.get(DcMotor.class, "shooter");
+        shooterMotor  = hardwareMap.get(DcMotor.class,
+
+                "shooter");
         hoodServoLeft = hardwareMap.get(Servo.class, "left_servo");
         hoodServoRight = hardwareMap.get(Servo.class, "right_servo");
 

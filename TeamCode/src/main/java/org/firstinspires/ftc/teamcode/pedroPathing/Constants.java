@@ -12,7 +12,7 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.PIDFCoefficients;
+import com.qualcomm.robotcore.hardware.Servo;
 
 // Limelight
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -76,22 +76,28 @@ public class Constants {
     public static final DcMotorSimple.Direction INTAKE_DIRECTION =
             DcMotorSimple.Direction.FORWARD;
 
-    // === Shooter Motor Constants (PIDF) ===
+    // === Indexer Motor Constants ===
+    public static final String INDEXER_MOTOR_NAME = "feeder";
+    public static final DcMotorSimple.Direction INDEXER_DIRECTION =
+            DcMotorSimple.Direction.REVERSE;
+
+    // === Shooter Motor Constants ===
     public static final String SHOOTER_MOTOR_NAME = "shooter";
-
     public static final DcMotorSimple.Direction SHOOTER_DIRECTION =
-            DcMotorSimple.Direction.FORWARD;
+            DcMotorSimple.Direction.REVERSE;
 
-    // Shooter specs
+    // === Servo Constants (NEW) ===
+    public static final String SERVO_NAME = "servo";
+    public static final Servo.Direction SERVO_DIRECTION = Servo.Direction.FORWARD;
+
+    // === Shooter Specs ===
     public static final double SHOOTER_WHEEL_DIAMETER_INCH = 4.0;
     public static final double SHOOTER_GEAR_RATIO = (18.0 / 24.0);
     public static final double SHOOTER_MAX_MOTOR_RPM = 6000.0;
 
-    // Calculated shooter RPM (motor → wheel)
     public static final double SHOOTER_MAX_WHEEL_RPM =
             SHOOTER_MAX_MOTOR_RPM * SHOOTER_GEAR_RATIO;
 
-    // PIDF for velocity control
     public static final double SHOOTER_kP = 20.0;
     public static final double SHOOTER_kI = 0.2;
     public static final double SHOOTER_kD = 1.5;
@@ -101,15 +107,36 @@ public class Constants {
     public static PathConstraints pathConstraints =
             new PathConstraints(0.99, 100, 1, 1);
 
+    // === Hardware Accessors ===
+    public static DcMotorEx intakeMotor;
+    public static DcMotorEx shooterMotor;
+    public static DcMotorEx indexerMotor;
+    public static Servo servo;   // <<< NEW SERVO
+
     // === Follower Builder ===
     public static Follower createFollower(HardwareMap hardwareMap) {
 
+        // Setup limelight
         if (limelight == null) {
             limelight = hardwareMap.get(Limelight3A.class, "Limelight");
             limelight.setPollRateHz(100);
             limelight.pipelineSwitch(0);
             limelight.start();
         }
+
+        // Load motors
+        intakeMotor = hardwareMap.get(DcMotorEx.class, INTAKE_MOTOR_NAME);
+        intakeMotor.setDirection(INTAKE_DIRECTION);
+
+        shooterMotor = hardwareMap.get(DcMotorEx.class, SHOOTER_MOTOR_NAME);
+        shooterMotor.setDirection(SHOOTER_DIRECTION);
+
+        indexerMotor = hardwareMap.get(DcMotorEx.class, INDEXER_MOTOR_NAME);
+        indexerMotor.setDirection(INDEXER_DIRECTION);
+
+        // === NEW: Load servo ===
+        servo = hardwareMap.get(Servo.class, SERVO_NAME);
+        servo.setDirection(SERVO_DIRECTION);
 
         return new FollowerBuilder(followerConstants, hardwareMap)
                 .pathConstraints(pathConstraints)

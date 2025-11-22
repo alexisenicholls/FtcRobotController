@@ -3,13 +3,12 @@ package org.firstinspires.ftc.teamcode.pedroPathing.Examples;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.PIDFCoefficients;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.BezierCurve;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.paths.PathChain;
 import com.pedropathing.util.Timer;
@@ -20,59 +19,57 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 public class ClosePositionBlue extends OpMode {
 
     private Follower follower;
-    private Timer delayTimer;
-
-    private Timer spinUpTimer;
-    private Timer fireTimer;
-    private boolean shotFiredInThisDelay = false;
-
-    private int pathState = 0;
-    private boolean pathStarted = false;
+    private Timer timer;
 
     private DcMotor intake;
     private DcMotorEx shooter;
+    private DcMotorEx indexer;
+    private Servo servo;
 
-    private final Pose startPose = new Pose(20.719, 122.763, Math.toRadians(323));
+    private final Pose startPose = new Pose(20.374, 122.590, Math.toRadians(323));
 
     private PathChain[] paths;
-    private boolean[] intakePaths; // true if intake should run
-    private double[] delays;
+    private boolean[] shooterPaths;
 
     private final double normalSpeed = 1.0;
-    private final double intakePathSpeed = 0.6; // 50% speed on intake paths
+    private final double intakePathSpeed = 0.6;
 
-    // Shooter control settings
-    private final double TARGET_WHEEL_RPM = 3000.0;       // wheel RPM goal
-    private final double READY_PERCENT = 0.95;           // 95% threshold
-    private final double SPINUP_FAILSAFE_SEC = 3.0;      // after 3s, shoot anyway
-    private final double FIRE_DURATION_SEC = 0.75;        // how long to run intake to feed projectile
+    // Timing constants
+    private final double PRE_SPIN_TIME = 2.0;  // shooter pre-spin
+    private final double BALL_INTAKE_TIME = 1.0;  // intake + servo down
+    private final double SERVO_UP_TIME = 1.0;     // servo up + indexer on + intake extra
+    private final double RESET_TIME = 0.3;        // reset servo down
+
+    // Servo positions
+    private final double SERVO_BOTTOM = 0.7;  // down
+    private final double SERVO_TOP = 0.0;     // up
+
+    private int pathState = 0;
+    private boolean pathStarted = false;
+    private boolean shootingPhase = false;
+
+    private int ballCycle = 0;      // which ball in the cycle
+    private double phaseTimer = 0;  // timing inside ball cycle
 
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
-        delayTimer = new Timer();
-        spinUpTimer = new Timer();
-        fireTimer = new Timer();
+        timer = new Timer();
 
-        // Intake
         intake = hardwareMap.dcMotor.get("intake");
-        intake.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake.setDirection(DcMotorSimple.Direction.REVERSE);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // Shooter
         shooter = hardwareMap.get(DcMotorEx.class, Constants.SHOOTER_MOTOR_NAME);
         shooter.setDirection(Constants.SHOOTER_DIRECTION);
-        shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
-        shooter.setPIDFCoefficients(
-                DcMotor.RunMode.RUN_USING_ENCODER,
-                new PIDFCoefficients(
-                        Constants.SHOOTER_kP,
-                        Constants.SHOOTER_kI,
-                        Constants.SHOOTER_kD,
-                        Constants.SHOOTER_kF
-                )
-        );
+        indexer = hardwareMap.get(DcMotorEx.class, Constants.INDEXER_MOTOR_NAME);
+        indexer.setDirection(Constants.INDEXER_DIRECTION);
+        indexer.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        servo = hardwareMap.get(Servo.class, "servo");
+        servo.setPosition(SERVO_BOTTOM); // start down
 
         follower.setStartingPose(startPose);
         buildPaths();
@@ -81,231 +78,189 @@ public class ClosePositionBlue extends OpMode {
         telemetry.update();
     }
 
-    // Helper: set motor velocity to achieve desired wheel RPM (converts through gear ratio)
-    private void spinShooterWheelRPM(double wheelRpm) {
-        double motorRpm = wheelRpm / Constants.SHOOTER_GEAR_RATIO;
-        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
-        double velocityTicksPerSec = (motorRpm / 60.0) * ticksPerRev;  // motor ticks/sec
-        shooter.setVelocity(velocityTicksPerSec);
-    }
-
-    // Helper: stop shooter (set velocity to 0)
-    private void stopShooter() {
-        shooter.setVelocity(0);
-    }
-
-    // Helper: read current wheel RPM (convert from motor ticks/sec -> motor RPM -> wheel RPM)
-    private double getCurrentWheelRPM() {
-        double ticksPerSec = shooter.getVelocity(); // motor shaft ticks/sec
-        double ticksPerRev = shooter.getMotorType().getTicksPerRev();
-        double motorRpm = (ticksPerSec * 60.0) / ticksPerRev;
-        double wheelRpm = motorRpm * Constants.SHOOTER_GEAR_RATIO;
-        return wheelRpm;
-    }
-
     private void buildPaths() {
-        paths = new PathChain[10];
-        intakePaths = new boolean[10];
-        delays = new double[10];
+        paths = new PathChain[9];
+        shooterPaths = new boolean[9];
 
-        // ---- PATH 1 ----
+        // Shooting paths: 0, 2, 5, 8
+
+        // Path 0
         paths[0] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(20.719, 122.763), new Pose(60.086, 83.396)))
+                .addPath(new BezierLine(new Pose(20.374, 122.590), new Pose(60.086, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(323), Math.toRadians(316))
                 .build();
-        intakePaths[0] = false;
-        delays[0] = 1.5;
+        shooterPaths[0] = true;
 
-        // ---- PATH 2 ----
+        // Path 1
         paths[1] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(33.151, 83.568)))
+                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(25.899, 83.396)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePaths[1] = true;    // intake path
-        delays[1] = 0.0;
+        shooterPaths[1] = false;
 
-        // ---- PATH 3 ----
+        // Path 2
         paths[2] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(33.151, 83.568), new Pose(60.086, 83.396)))
+                .addPath(new BezierLine(new Pose(25.899, 83.396), new Pose(59.914, 83.396)))
                 .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
                 .build();
-        intakePaths[2] = false;
-        delays[2] = 1.5;
+        shooterPaths[2] = true;
 
-        // ---- PATH 4 ----
+        // Path 3
         paths[3] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(25.554, 84.086)))
+                .addPath(new BezierLine(new Pose(59.914, 83.396), new Pose(59.741, 59.223)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePaths[3] = true;    // intake path
-        delays[3] = 0.0;
+        shooterPaths[3] = false;
 
-        // ---- PATH 5 ----
+        // Path 4
         paths[4] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(25.554, 84.086), new Pose(60.086, 83.396)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+                .addPath(new BezierLine(new Pose(59.741, 59.223), new Pose(26.935, 59.223)))
+                .setTangentHeadingInterpolation()
                 .build();
-        intakePaths[4] = false;
-        delays[4] = 1.5;
+        shooterPaths[4] = false;
 
-        // ---- PATH 6 ----
+        // Path 5
         paths[5] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(60.086, 83.396), new Pose(59.568, 59.914)))
-                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(new Pose(26.935, 59.223), new Pose(59.914, 83.396)))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(312))
                 .build();
-        intakePaths[5] = true;    // intake path
-        delays[5] = 0.0;
+        shooterPaths[5] = true;
 
-        // ---- PATH 7 ----
+        // Path 6
         paths[6] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(59.568, 59.914), new Pose(33.151, 59.741)))
+                .addPath(new BezierLine(new Pose(59.914, 83.396), new Pose(59.396, 34.532)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePaths[6] = true;    // intake path
-        delays[6] = 0.0;
+        shooterPaths[6] = false;
 
-        // ---- PATH 8 ----
+        // Path 7
         paths[7] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(33.151, 59.741), new Pose(60.086, 83.396)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
-                .build();
-        intakePaths[7] = false;
-        delays[7] = 1.5;
-
-        // ---- PATH 9 ----
-        paths[8] = follower.pathBuilder()
-                .addPath(new BezierCurve(
-                        new Pose(60.086, 83.396),
-                        new Pose(69.065, 59.223),
-                        new Pose(27.799, 59.741)))
+                .addPath(new BezierLine(new Pose(59.396, 34.532), new Pose(27.453, 34.705)))
                 .setTangentHeadingInterpolation()
                 .build();
-        intakePaths[8] = true;    // intake path
-        delays[8] = 0.0;
+        shooterPaths[7] = false;
 
-        // ---- PATH 10 ----
-        paths[9] = follower.pathBuilder()
-                .addPath(new BezierLine(new Pose(27.799, 59.741), new Pose(60.086, 83.223)))
-                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(316))
+        // Path 8
+        paths[8] = follower.pathBuilder()
+                .addPath(new BezierLine(new Pose(27.453, 34.705), new Pose(60.086, 83.396)))
+                .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(310))
                 .build();
-        intakePaths[9] = false;
-        delays[9] = 1.5;
+        shooterPaths[8] = true;
     }
 
     @Override
     public void start() {
         pathState = 0;
         pathStarted = false;
-        delayTimer.resetTimer();
-        spinUpTimer.resetTimer();
-        fireTimer.resetTimer();
-        shotFiredInThisDelay = false;
+        shootingPhase = false;
+        ballCycle = 0;
+        phaseTimer = 0;
+        timer.resetTimer();
     }
 
     @Override
     public void loop() {
         follower.update();
 
-        if (pathState < paths.length) {
-            boolean isIntakePath = intakePaths[pathState];
-            double delaySec = delays[pathState];
-
-            // dynamic speed: slow on intake paths OR while firing
-            double speed = (isIntakePath || shotFiredInThisDelay) ? intakePathSpeed : normalSpeed;
-
-            // pass the computed speed into runPath so follower.setMaxPower() uses it
-            runPath(paths[pathState], isIntakePath, delaySec, speed);
-        } else {
+        if (pathState >= paths.length) {
+            shooter.setPower(0);
+            indexer.setPower(0);
             intake.setPower(0);
-            stopShooter();
+            servo.setPosition(SERVO_BOTTOM);
             telemetry.addData("Status", "Auto Complete");
+            return;
         }
 
+        boolean isShooting = shooterPaths[pathState];
+
+        if (!pathStarted) {
+            double speed = (isShooting) ? normalSpeed : intakePathSpeed;
+            follower.setMaxPower(speed);
+            follower.followPath(paths[pathState]);
+            pathStarted = true;
+
+            intake.setPower(1.0);
+            indexer.setPower(0);
+            shooter.setPower(0);
+            servo.setPosition(SERVO_BOTTOM);
+
+            timer.resetTimer();
+            shootingPhase = false;
+            ballCycle = 0;
+        }
+
+        // Wait for path to finish
+        if (follower.isBusy()) {
+            if (!shootingPhase && isShooting) shooter.setPower(1.0); // pre-spin
+            return;
+        }
+
+        // Shooting phase
+        if (isShooting) shootingLogic();
+        else advancePath();
+
+        // Telemetry
         telemetry.addData("Path", pathState + 1);
+        telemetry.addData("Ball Cycle", ballCycle);
         telemetry.addData("Intake Power", intake.getPower());
-        telemetry.addData("Shooter Wheel RPM", String.format("%.1f", getCurrentWheelRPM()));
+        telemetry.addData("Shooter Power", shooter.getPower());
+        telemetry.addData("Indexer Power", indexer.getPower());
+        telemetry.addData("Servo Position", servo.getPosition());
         telemetry.update();
     }
 
-    private void runPath(PathChain path, boolean isIntakePath, double delaySeconds, double speed) {
+    private void shootingLogic() {
+        int maxBalls = (pathState == 0) ? 2 : 3; // first shooting path = 2 balls
 
-        // set follower max power according to computed speed from loop()
-        follower.setMaxPower(speed);
-
-        // Start path if not already started
-        if (!pathStarted) {
-            follower.followPath(path);
-
-            // Intake: ALWAYS 100% when this path is an intake path
-            intake.setPower(isIntakePath ? 1.0 : 0.0);
-
-            // make sure shooter is off while driving
-            stopShooter();
-
-            pathStarted = true;
-            delayTimer.resetTimer();
-
-            // reset timers/flags for the upcoming delay/shoot sequence
-            spinUpTimer.resetTimer();
-            fireTimer.resetTimer();
-            shotFiredInThisDelay = false;
+        if (!shootingPhase) {
+            shootingPhase = true;
+            shooter.setPower(1.0);
+            phaseTimer = 0;
+            timer.resetTimer();
         }
 
-        // While follower is still moving, keep resetting the delay timer so that delay only counts after movement done
-        if (follower.isBusy()) {
-            // Reset the delay timer while we're still moving
-            delayTimer.resetTimer();
+        phaseTimer = timer.getElapsedTimeSeconds();
+        double cycleTime = BALL_INTAKE_TIME + SERVO_UP_TIME + RESET_TIME;
+        double currentBallTime = phaseTimer - (ballCycle * cycleTime);
 
-            // keep shooter stopped while moving (you requested this behavior)
-            stopShooter();
-
-            // ensure shot flag cleared while moving
-            shotFiredInThisDelay = false;
+        // Step 1 + early Step 2: intake ON, servo DOWN
+        if (currentBallTime < BALL_INTAKE_TIME + 0.2) {
+            intake.setPower(1.0);
+            indexer.setPower(0);
+            servo.setPosition(SERVO_BOTTOM);
+            return;
         }
-        else {
-            // follower finished the path → begin delay / shooting logic
-            if (delaySeconds <= 0.0) {
-                // No delay configured: advance immediately
-                pathState++;
-                pathStarted = false;
-                stopShooter();
-                intake.setPower(0);
-                return;
-            }
 
-            double elapsed = delayTimer.getElapsedTimeSeconds();
-
-            // If we haven't fired in this delay yet, attempt to get shooter ready then fire
-            if (!shotFiredInThisDelay) {
-                // Start spinning shooter continuously during the delay window
-                spinShooterWheelRPM(TARGET_WHEEL_RPM);
-
-                // Read current RPM, check readiness or spinup failsafe or delay expiration
-                double currentWheelRpm = getCurrentWheelRPM();
-                boolean atTarget = currentWheelRpm >= (READY_PERCENT * TARGET_WHEEL_RPM);
-                boolean spinUpTimeout = spinUpTimer.getElapsedTimeSeconds() >= SPINUP_FAILSAFE_SEC;
-                boolean delayExpired = elapsed >= delaySeconds;
-
-                if (atTarget || spinUpTimeout || delayExpired) {
-                    // Begin firing: run intake at full power to feed projectile
-                    intake.setPower(1.0); // always feed at full power during firing
-                    fireTimer.resetTimer();
-                    shotFiredInThisDelay = true;
-                }
-            }
-            else {
-                // We already started firing; wait for firing duration to complete
-                if (fireTimer.getElapsedTimeSeconds() >= FIRE_DURATION_SEC) {
-                    // stop shooter + intake and proceed to next path
-                    stopShooter();
-                    intake.setPower(0);
-                    pathState++;
-                    pathStarted = false;
-                } else {
-                    // keep shooter spinning and intake running during firing window
-                    spinShooterWheelRPM(TARGET_WHEEL_RPM);
-                }
-            }
+        // Step 2: Servo UP, indexer ON, intake OFF
+        if (currentBallTime < BALL_INTAKE_TIME + SERVO_UP_TIME) {
+            intake.setPower(0);
+            indexer.setPower(-1.0);
+            servo.setPosition(SERVO_TOP);
+            return;
         }
+
+        // Step 3: Reset servo DOWN
+        if (currentBallTime < cycleTime) {
+            intake.setPower(0);
+            indexer.setPower(0);
+            servo.setPosition(SERVO_BOTTOM);
+            return;
+        }
+
+        // Ball cycle complete
+        ballCycle++;
+        if (ballCycle >= maxBalls) {
+            intake.setPower(0);
+            indexer.setPower(0);
+            servo.setPosition(SERVO_BOTTOM);
+            advancePath();
+        }
+    }
+
+    private void advancePath() {
+        pathState++;
+        pathStarted = false;
+        shootingPhase = false;
+        timer.resetTimer();
     }
 }
